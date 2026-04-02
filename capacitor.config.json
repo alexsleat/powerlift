@@ -1,0 +1,6 @@
+{
+    "appId": "com.yourname.powerlifting",
+    "appName": "PowerliftingApp",
+    "webDir": "dist",
+    "bundledWebRuntime": false
+  }

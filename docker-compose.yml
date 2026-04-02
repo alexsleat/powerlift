@@ -1,0 +1,8 @@
+services:
+  powerlift:
+    build: .
+    image: powerlift:latest
+    container_name: powerlift
+    ports:
+      - "8080:80"
+    restart: unless-stopped
