@@ -1,8 +1,32 @@
 services:
-  powerlift:
-    build: .
-    image: powerlift:latest
-    container_name: powerlift
-    ports:
-      - "8080:80"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: powerlift-backend
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_PATH=/data/powerlift.db
+      - PORT=3001
+      # Set COOKIE_SECURE=true if you have HTTPS configured (recommended)
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+    volumes:
+      - powerlift_data:/data
     restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: powerlift-frontend
+    ports:
+      - "${PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  powerlift_data:
+    driver: local

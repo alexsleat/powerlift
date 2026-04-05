@@ -1,0 +1,22 @@
+FROM node:20-alpine
+
+WORKDIR /app/server
+
+# Build tools required by native modules (better-sqlite3, bcrypt)
+RUN apk add --no-cache python3 make g++
+
+# Install dependencies first (layer cache)
+COPY server/package*.json ./
+RUN npm install --production --no-fund --no-audit
+
+# Remove build tools to keep image lean
+RUN apk del python3 make g++
+
+# Copy server source
+COPY server/ ./
+
+# Copy seed data (exercise library + templates)
+COPY public/data/ /app/public/data/
+
+EXPOSE 3001
+CMD ["node", "index.js"]

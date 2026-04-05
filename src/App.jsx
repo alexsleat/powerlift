@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { api } from "./api.js";
+import AuthPage from "./AuthPage.jsx";
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 
@@ -1373,47 +1375,65 @@ export default function App() {
   const [activeTab,      setActiveTab]      = useState("session");
   const [loading,        setLoading]        = useState(true);
   const [sessionContext, setSessionContext] = useState(null); // { weight, exName } for Plates tab
+  const [user,           setUser]           = useState(null);
+  const [authChecked,    setAuthChecked]    = useState(false);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const savedSchema = localStorage.getItem("powerlifting_schema");
-        const [exercisesRes, templatesRes] = await Promise.all([
-          fetch("data/exercise.json"),
-          fetch("data/templates.json")
-        ]);
-        const exercisesData = await exercisesRes.json();
-        const templatesData = await templatesRes.json();
-
-        let schemaData;
-        if (savedSchema) {
-          schemaData = JSON.parse(savedSchema);
-        } else {
-          const schemaRes = await fetch("data/root_schema.json");
-          schemaData = await schemaRes.json();
-        }
-        schemaData.programme_templates = templatesData;
-
-        setRootSchema(schemaData);
-        setExLib(exercisesData);
-        localStorage.setItem("powerlifting_schema", JSON.stringify(schemaData));
-        localStorage.setItem("powerlifting_exlib",  JSON.stringify(exercisesData));
-      } catch (err) {
-        console.error("Failed to load data:", err);
-      } finally {
+    async function init() {
+      // Try to silently restore the session using the httpOnly refresh-token cookie
+      const authData = await api.auth.refresh();
+      if (!authData) {
+        setAuthChecked(true);
         setLoading(false);
+        return;
       }
+      api.setToken(authData.accessToken);
+      setUser(authData.user);
+      await loadAppData();
+      setAuthChecked(true);
+      setLoading(false);
     }
-    loadData();
+    init();
   }, []);
+
+  async function loadAppData() {
+    try {
+      const [schemaData, exercisesData, templatesData] = await Promise.all([
+        api.data.schema(),
+        api.data.exercises(),
+        api.data.templates(),
+      ]);
+      schemaData.programme_templates = templatesData;
+      setRootSchema(schemaData);
+      setExLib(exercisesData);
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    }
+  }
+
+  async function handleLogin(loggedInUser) {
+    setUser(loggedInUser);
+    setLoading(true);
+    await loadAppData();
+    setLoading(false);
+  }
+
+  async function handleLogout() {
+    try { await api.auth.logout(); } catch { /* ignore network errors on logout */ }
+    api.clearToken();
+    setUser(null);
+    setRootSchema(null);
+    setExLib(null);
+  }
 
   function updateSchema(newSchema) {
     setRootSchema(newSchema);
-    localStorage.setItem("powerlifting_schema", JSON.stringify(newSchema));
+    // Fire-and-forget — UI updates immediately, server syncs in background
+    api.data.putSchema(newSchema).catch(err => console.error("Schema sync failed:", err));
   }
   function updateExLib(newLib) {
     setExLib(newLib);
-    localStorage.setItem("powerlifting_exlib", JSON.stringify(newLib));
+    api.data.putExlib(newLib).catch(err => console.error("ExLib sync failed:", err));
   }
   function handleRestore(schema, lib) {
     schema.programme_templates = rootSchema.programme_templates;
@@ -1485,7 +1505,8 @@ export default function App() {
     });
   }
 
-  if (loading) return <div style={{ color: "#aaa", padding: "24px", fontFamily: "monospace", fontSize: "14px" }}>Loading...</div>;
+  if (!authChecked || loading) return <div style={{ color: "#aaa", padding: "24px", fontFamily: "monospace", fontSize: "14px" }}>Loading...</div>;
+  if (!user) return <AuthPage onLogin={handleLogin} />;
 
   const units = rootSchema.user_profile?.units || "kg";
   const tabs  = [
@@ -1506,6 +1527,10 @@ export default function App() {
         <div style={S.navSep} />
         <button style={{ ...S.navBtn(false), minWidth: "44px" }} onClick={toggleUnits} title="Toggle kg / lb">
           {units.toUpperCase()}
+        </button>
+        <div style={S.navSep} />
+        <button style={{ ...S.navBtn(false), fontSize: "12px", minWidth: "52px" }} onClick={handleLogout} title={`Logout (${user.username})`}>
+          ⏻ Out
         </button>
       </nav>
 

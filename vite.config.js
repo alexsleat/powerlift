@@ -7,5 +7,12 @@ export default defineConfig({
   server: {
     host: true,   // bind to 0.0.0.0 so Docker can expose it
     port: 5173,
+    proxy: {
+      // Forward /api requests to the backend during local development
+      '/api': {
+        target:      'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
 })
