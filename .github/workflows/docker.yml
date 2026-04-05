@@ -1,4 +1,4 @@
-name: Build and push Docker image
+name: Build and push Docker images
 
 on:
   push:
@@ -20,9 +20,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push frontend
         uses: docker/build-push-action@v5
         with:
           context: .
+          dockerfile: Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/powerlift:latest
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          dockerfile: Dockerfile.server
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/powerlift-server:latest
