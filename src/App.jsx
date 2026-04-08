@@ -620,10 +620,127 @@ function BackupRestore({ rootSchema, exLib, onRestore }) {
   );
 }
 
+// ─── SESSION PLAN BUILDER (module-level so preview can reuse it) ──────────────
+
+function buildSessionPlan(inst, tmpl, rootSchema) {
+  const ph   = tmpl.phases[0];
+  const week = inst.current_week;
+  const day  = inst.current_day;
+
+  // 531 wave weeks
+  if (ph.wave_weeks) {
+    const waveWeek = ph.wave_weeks.find(w => w.week === week);
+    const mainLift = ph.main_lifts.find(l => l.day === day);
+    if (!mainLift || !waveWeek) return null;
+    const tm         = inst.training_maxes.find(t => t.exercise_id === mainLift.exercise_id)?.tm_kg || 100;
+    const role       = inst.current_cycle_role;
+    const roleConfig = tmpl.cycle_roles?.[role];
+    const isAmrap    = roleConfig?.amrap_sets ?? true;
+    const warmups    = calcWarmupSets(roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5), tmpl.warmup_protocol.start_weight_kg, tmpl.warmup_protocol.max_warmup_sets);
+    const mainSets   = waveWeek.core_sets.map((s, i) => {
+      const w    = roundToNearest(s.tm_pct * tm, 2.5);
+      const reps = s.reps === "amrap" && !isAmrap ? 5 : s.reps;
+      return { setIndex: i, weight: w, reps, isAmrap: s.reps === "amrap" && isAmrap, amrap_minimum: s.amrap_minimum, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null };
+    });
+    const exercises = [];
+    exercises.push({ exercise_id: mainLift.exercise_id, role: "main",
+      sets: [...warmups.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...mainSets] });
+    if (roleConfig?.supplemental?.type === "FSL") {
+      const fslW = roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5);
+      exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: "FSL Back-off",
+        sets: Array.from({ length: roleConfig.supplemental.sets }, (_, i) => ({ setIndex: i, weight: fslW, reps: roleConfig.supplemental.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+    }
+    return { exercises, week, day, weekLabel: waveWeek.week_label, role, mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
+  }
+
+  // Leviathan
+  if (ph.leviathan_weeks) {
+    const levWeek  = ph.leviathan_weeks.find(w => w.week === week);
+    const mainLift = ph.main_lifts.find(l => l.day === day);
+    if (!mainLift || !levWeek) return null;
+    const tm       = inst.training_maxes.find(t => t.exercise_id === mainLift.exercise_id)?.tm_kg || 100;
+    const exercises = [];
+    if (levWeek.is_deload) {
+      exercises.push({ exercise_id: mainLift.exercise_id, role: "main", label: "Deload",
+        sets: levWeek.deload_sets.map((s, i) => ({ setIndex: i, weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+      (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
+        exercises.push({ exercise_id: a.exercise_id, role: "assistance",
+          sets: Array.from({ length: a.deload_sets || 2 }, (_, i) => ({ setIndex: i, weight: 0, reps: a.deload_reps || 10, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
+      );
+    } else {
+      const warmupSets = levWeek.warmup_sets.map((s, i) => ({ setIndex: i, weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null }));
+      const mainSingle = { setIndex: 0, weight: roundToNearest(levWeek.main_single.tm_pct * tm, 2.5), reps: 1, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null };
+      exercises.push({ exercise_id: mainLift.exercise_id, role: "main", sets: [...warmupSets, mainSingle] });
+      if (levWeek.ssl) {
+        const sslW = roundToNearest(levWeek.ssl.tm_pct * tm, 2.5);
+        exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: `SSL — ${Math.round(levWeek.ssl.tm_pct * 100)}% TM`,
+          sets: Array.from({ length: levWeek.ssl.sets }, (_, i) => ({ setIndex: i, weight: sslW, reps: levWeek.ssl.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+      }
+      (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
+        exercises.push({ exercise_id: a.exercise_id, role: "assistance",
+          sets: Array.from({ length: a.sets }, (_, i) => ({ setIndex: i, weight: 0, reps: a.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
+      );
+    }
+    return { exercises, week, day, weekLabel: levWeek.week_label, role: inst.current_cycle_role || "leviathan", mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
+  }
+
+  // StrongLifts
+  if (ph.workout_templates) {
+    const patIdx  = (inst.current_day - 1) % ph.session_alternation_pattern.length;
+    const key     = ph.session_alternation_pattern[patIdx];
+    const exercises = ph.workout_templates[key].map(te => {
+      const liftW  = rootSchema?.lift_maxes?.find(l => l.exercise_id === te.exercise_id)?.one_rm_kg;
+      const fakeW  = liftW ? roundToNearest(liftW * 0.7, 2.5) : 60;
+      const warmups = te.set_scheme_type !== "single_top_set" ? calcWarmupSets(fakeW, tmpl.warmup_protocol.start_weight_kg, tmpl.warmup_protocol.max_warmup_sets) : [{ weight: 20, reps: 5 }];
+      const work   = Array.from({ length: te.sets }, (_, i) => ({ setIndex: i, weight: fakeW, reps: te.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null }));
+      return { exercise_id: te.exercise_id, role: te.role,
+        sets: [...warmups.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...work] };
+    });
+    return { exercises, week: inst.current_week, day: inst.current_day, weekLabel: `Workout ${key}`, role: null, mainLiftId: null, instanceId: inst.id };
+  }
+  return null;
+}
+
+function getTemplateExercises(tmpl) {
+  const ph = tmpl?.phases?.[0];
+  if (!ph) return [];
+  if (ph.main_lifts) return [...new Set(ph.main_lifts.map(l => l.exercise_id))];
+  if (ph.workout_templates) {
+    const ids = new Set();
+    Object.values(ph.workout_templates).forEach(wt => wt.forEach(te => ids.add(te.exercise_id)));
+    return [...ids];
+  }
+  return [];
+}
+
+function previewCycleSessions(inst, tmpl, rootSchema, count = 5) {
+  const maxDay  = tmpl?.days_per_week || 4;
+  const maxWeek = tmpl?.cycle_structure?.mesocycle_weeks || 3;
+  const sessions = [];
+  let d = inst.current_day, w = inst.current_week, c = inst.current_cycle;
+  for (let i = 0; i < count; i++) {
+    const fake = { ...inst, current_day: d, current_week: w, current_cycle: c };
+    const plan = buildSessionPlan(fake, tmpl, rootSchema);
+    if (plan) sessions.push({ plan, isNext: i === 0 });
+    d++;
+    if (d > maxDay) { d = 1; w++; }
+    if (maxWeek && w > maxWeek) { w = 1; c++; }
+  }
+  return sessions;
+}
+
 // ─── TM REVIEW PANEL ──────────────────────────────────────────────────────────
 
 function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
   const increments = tmpl?.progression_model?.lift_increments || [];
+  const tmPct      = tmpl?.progression_model?.initial_tm_percentage ?? 0.90;
+
+  function getBestE1rm(exerciseId) {
+    const entries = rootSchema.e1rm_log?.filter(e => e.exercise_id === exerciseId) || [];
+    if (entries.length === 0) return null;
+    return Math.max(...entries.map(e => e.e1rm_kg));
+  }
+
   const [newTMs, setNewTMs] = useState(() =>
     inst.training_maxes.map(tm => {
       const inc   = increments.find(li => li.exercises?.includes(tm.exercise_id) || li.exercise_id === tm.exercise_id);
@@ -634,11 +751,12 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
   const [editIdx, setEditIdx] = useState(null);
 
   function apply() {
+    const today = new Date().toISOString().split("T")[0];
     onChange({ ...rootSchema, programme_instances: rootSchema.programme_instances.map(i => i.id !== inst.id ? i : {
       ...i, needs_tm_review: false,
       training_maxes: i.training_maxes.map(tm => {
         const n = newTMs.find(t => t.exercise_id === tm.exercise_id);
-        return n ? { ...tm, tm_kg: n.new_kg, last_updated: new Date().toISOString().split("T")[0] } : tm;
+        return n ? { ...tm, tm_kg: n.new_kg, last_updated: today } : tm;
       })
     })});
   }
@@ -672,26 +790,39 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
         </div>
         <div style={S.cardBody}>
           <div style={{ color: "#888", fontSize: "12px", marginBottom: "12px" }}>
-            Tap a value to edit. Confirm when ready.
+            Tap New TM to edit. "Use e1RM" sets TM from your best estimated 1RM ({Math.round(tmPct * 100)}%).
           </div>
           <table style={S.table}>
             <thead><tr>
               <th style={S.th}>Lift</th>
-              <th style={S.th}>Old</th>
-              <th style={S.th}>New (tap to edit)</th>
+              <th style={S.th}>Best e1RM</th>
+              <th style={S.th}>New TM</th>
             </tr></thead>
             <tbody>
-              {newTMs.map((tm, i) => (
-                <tr key={i}>
-                  <td style={S.td}>{liftName(tm.exercise_id)}</td>
-                  <td style={{ ...S.td, color: "#666" }}>{fmtW(tm.current_kg, units)}</td>
-                  <td style={S.td}>
-                    <button style={S.btnSm("active")} onClick={() => setEditIdx(i)}>
-                      {fmtW(tm.new_kg, units)} ✎
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {newTMs.map((tm, i) => {
+                const bestE1rm = getBestE1rm(tm.exercise_id);
+                const fromE1rm = bestE1rm ? roundToNearest(bestE1rm * tmPct, 2.5) : null;
+                return (
+                  <tr key={i}>
+                    <td style={S.td}>{liftName(tm.exercise_id)}</td>
+                    <td style={S.td}>
+                      {bestE1rm ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <span style={{ color: "#aaa", fontSize: "13px" }}>{fmtW(bestE1rm, units)}</span>
+                          <button style={S.btnSm("warning")} onClick={() =>
+                            setNewTMs(prev => prev.map((t, j) => j === i ? { ...t, new_kg: fromE1rm } : t))
+                          }>Use →{fmtW(fromE1rm, units)}</button>
+                        </div>
+                      ) : <span style={{ color: "#444", fontSize: "12px" }}>no data</span>}
+                    </td>
+                    <td style={S.td}>
+                      <button style={S.btnSm("active")} onClick={() => setEditIdx(i)}>
+                        {fmtW(tm.new_kg, units)} ✎
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           <div style={{ ...S.flex, marginTop: "14px", flexWrap: "wrap" }}>
@@ -721,47 +852,115 @@ function SchemaSection({ title, children, defaultOpen = true }) {
 
 // ─── NEW PROGRAMME PANEL ──────────────────────────────────────────────────────
 
-function NewProgrammePanel({ rootSchema, onChange }) {
+function NewProgrammePanel({ rootSchema, exLib, onChange }) {
+  const units = rootSchema.user_profile?.units || "kg";
   const [selectedId, setSelectedId] = useState("");
+  const [step,       setStep]       = useState("template"); // "template" | "maxes"
+  const [maxInputs,  setMaxInputs]  = useState({});
   const tmpl = rootSchema.programme_templates.find(t => t.id === selectedId);
+
+  function handleTemplateSelect(id) {
+    setSelectedId(id);
+    const t = rootSchema.programme_templates.find(t => t.id === id);
+    const exIds = getTemplateExercises(t);
+    const inputs = {};
+    exIds.forEach(exId => {
+      const existing = rootSchema.lift_maxes.find(l => l.exercise_id === exId);
+      inputs[exId] = existing ? String(dspW(existing.one_rm_kg, units)) : "";
+    });
+    setMaxInputs(inputs);
+  }
 
   function start() {
     if (!tmpl) return;
-    const tmPct         = tmpl.progression_model?.initial_tm_percentage ?? 0.90;
-    const training_maxes = rootSchema.lift_maxes.map(lm => ({
-      exercise_id: lm.exercise_id,
-      tm_kg: roundToNearest(lm.one_rm_kg * tmPct, 2.5),
-      last_updated: new Date().toISOString().split("T")[0],
-      cycle_when_set: 1
-    }));
+    const tmPct = tmpl.progression_model?.initial_tm_percentage ?? 0.90;
+    const today = new Date().toISOString().split("T")[0];
+    const exIds = getTemplateExercises(tmpl);
+
+    // Update lift_maxes with entered values
+    let newLiftMaxes = [...rootSchema.lift_maxes];
+    exIds.forEach(exId => {
+      const raw = parseFloat(maxInputs[exId]);
+      if (!raw || raw <= 0) return;
+      const kg = toKg(raw, units);
+      const idx = newLiftMaxes.findIndex(l => l.exercise_id === exId);
+      const entry = { exercise_id: exId, one_rm_kg: kg, tested_date: today, method: "manual" };
+      if (idx >= 0) newLiftMaxes[idx] = entry; else newLiftMaxes.push(entry);
+    });
+
+    const training_maxes = newLiftMaxes
+      .filter(lm => exIds.length === 0 || exIds.includes(lm.exercise_id))
+      .map(lm => ({
+        exercise_id: lm.exercise_id,
+        tm_kg: roundToNearest(lm.one_rm_kg * tmPct, 2.5),
+        last_updated: today, cycle_when_set: 1
+      }));
+
     const newInst = {
       id: `prog_inst_${Date.now()}`, template_id: selectedId, status: "active",
-      started_date: new Date().toISOString().split("T")[0],
+      started_date: today,
       current_phase_id: tmpl.phases?.[0]?.phase_id || null,
       current_cycle_role: selectedId === "531_fsl" ? "leader" : "standard",
       current_macrocycle_block: 1, current_cycle: 1, current_week: 1, current_day: 1,
       training_maxes, failure_tracking: [], phase_history: [], needs_tm_review: false
     };
-    onChange({ ...rootSchema, programme_instances: [...rootSchema.programme_instances, newInst] });
-    setSelectedId("");
+    onChange({ ...rootSchema, lift_maxes: newLiftMaxes, programme_instances: [...rootSchema.programme_instances, newInst] });
+    setSelectedId(""); setStep("template"); setMaxInputs({});
   }
+
+  const exIds = getTemplateExercises(tmpl);
 
   return (
     <SchemaSection title="Start New Programme">
-      <div style={{ marginBottom: "12px" }}>
-        <label style={S.label}>Template</label>
-        <select style={{ ...S.select, width: "100%" }} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
-          <option value="">— select —</option>
-          {rootSchema.programme_templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
-      {tmpl && (
-        <div style={{ fontSize: "12px", color: "#777", marginBottom: "12px" }}>
-          TMs set at {Math.round((tmpl.progression_model?.initial_tm_percentage ?? 0.9) * 100)}% of current 1RMs.
-          <div style={{ marginTop: "4px", color: "#555" }}>{tmpl.description}</div>
-        </div>
+      {step === "template" && (
+        <>
+          <div style={{ marginBottom: "12px" }}>
+            <label style={S.label}>Template</label>
+            <select style={{ ...S.select, width: "100%" }} value={selectedId} onChange={e => handleTemplateSelect(e.target.value)}>
+              <option value="">— select —</option>
+              {rootSchema.programme_templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          {tmpl && (
+            <div style={{ fontSize: "12px", color: "#777", marginBottom: "12px" }}>
+              TMs will be set at {Math.round((tmpl.progression_model?.initial_tm_percentage ?? 0.9) * 100)}% of your 1RMs.
+              <div style={{ marginTop: "4px", color: "#555" }}>{tmpl.description}</div>
+            </div>
+          )}
+          <button style={S.btn("primary")} onClick={() => setStep("maxes")} disabled={!selectedId}>
+            Next: Enter Maxes →
+          </button>
+        </>
       )}
-      <button style={S.btn("primary")} onClick={start} disabled={!selectedId}>Start →</button>
+      {step === "maxes" && tmpl && (
+        <>
+          <div style={{ color: "#aaa", fontSize: "12px", marginBottom: "14px" }}>
+            Enter your current 1RM for each lift. Leave blank to skip. TMs set at {Math.round((tmpl.progression_model?.initial_tm_percentage ?? 0.9) * 100)}%.
+          </div>
+          {exIds.map(exId => {
+            const exInfo = exLib?.exercises?.find(e => e.id === exId) || { name: (LIFT_META[exId]?.name || exId.replace("ex_", "")) };
+            const raw = parseFloat(maxInputs[exId]);
+            const tmPreview = raw > 0 ? roundToNearest(toKg(raw, units) * (tmpl.progression_model?.initial_tm_percentage ?? 0.9), 2.5) : null;
+            return (
+              <div key={exId} style={{ marginBottom: "14px" }}>
+                <label style={S.label}>{exInfo.name} 1RM ({units})</label>
+                <input style={S.input} type="number" step={units === "lb" ? "5" : "2.5"}
+                  value={maxInputs[exId] ?? ""}
+                  onChange={e => setMaxInputs(prev => ({ ...prev, [exId]: e.target.value }))} />
+                {tmPreview && (
+                  <div style={{ color: "#555", fontSize: "11px", marginTop: "3px" }}>
+                    Training max → {fmtW(tmPreview, units)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button style={S.btn()} onClick={() => setStep("template")}>← Back</button>
+            <button style={S.btn("primary")} onClick={start}>Start Programme →</button>
+          </div>
+        </>
+      )}
     </SchemaSection>
   );
 }
@@ -844,7 +1043,7 @@ function RootSchemaView({ rootSchema, exLib, onChange, onRestore }) {
               ))}
             </SchemaSection>
 
-            <NewProgrammePanel rootSchema={rootSchema} onChange={onChange} />
+            <NewProgrammePanel rootSchema={rootSchema} exLib={exLib} onChange={onChange} />
 
             <SchemaSection title={`Active Programmes (${activeInsts.length})`}>
               {activeInsts.length === 0 && <div style={{ color: "#555", fontSize: "13px" }}>None. Start one above.</div>}
@@ -1020,92 +1219,11 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setExpandedSet(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; });
   }
 
-  // ── session builder ───────────────────────────────────────────────────────
-
-  function buildSessionPlan(inst, tmpl) {
-    const ph   = tmpl.phases[0];
-    const week = inst.current_week;
-    const day  = inst.current_day;
-
-    // 531 wave weeks
-    if (ph.wave_weeks) {
-      const waveWeek = ph.wave_weeks.find(w => w.week === week);
-      const mainLift = ph.main_lifts.find(l => l.day === day);
-      if (!mainLift || !waveWeek) return null;
-      const tm         = inst.training_maxes.find(t => t.exercise_id === mainLift.exercise_id)?.tm_kg || 100;
-      const role       = inst.current_cycle_role;
-      const roleConfig = tmpl.cycle_roles?.[role];
-      const isAmrap    = roleConfig?.amrap_sets ?? true;
-      const warmups    = calcWarmupSets(roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5), tmpl.warmup_protocol.start_weight_kg, tmpl.warmup_protocol.max_warmup_sets);
-      const mainSets   = waveWeek.core_sets.map((s, i) => {
-        const w    = roundToNearest(s.tm_pct * tm, 2.5);
-        const reps = s.reps === "amrap" && !isAmrap ? 5 : s.reps;
-        return { setIndex: i, weight: w, reps, isAmrap: s.reps === "amrap" && isAmrap, amrap_minimum: s.amrap_minimum, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null };
-      });
-      const exercises = [];
-      exercises.push({ exercise_id: mainLift.exercise_id, role: "main",
-        sets: [...warmups.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...mainSets] });
-      if (roleConfig?.supplemental?.type === "FSL") {
-        const fslW = roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5);
-        exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: "FSL Back-off",
-          sets: Array.from({ length: roleConfig.supplemental.sets }, (_, i) => ({ setIndex: i, weight: fslW, reps: roleConfig.supplemental.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
-      }
-      return { exercises, week, day, weekLabel: waveWeek.week_label, role, mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
-    }
-
-    // Leviathan
-    if (ph.leviathan_weeks) {
-      const levWeek  = ph.leviathan_weeks.find(w => w.week === week);
-      const mainLift = ph.main_lifts.find(l => l.day === day);
-      if (!mainLift || !levWeek) return null;
-      const tm       = inst.training_maxes.find(t => t.exercise_id === mainLift.exercise_id)?.tm_kg || 100;
-      const exercises = [];
-      if (levWeek.is_deload) {
-        exercises.push({ exercise_id: mainLift.exercise_id, role: "main", label: "Deload",
-          sets: levWeek.deload_sets.map((s, i) => ({ setIndex: i, weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
-        (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
-          exercises.push({ exercise_id: a.exercise_id, role: "assistance",
-            sets: Array.from({ length: a.deload_sets || 2 }, (_, i) => ({ setIndex: i, weight: 0, reps: a.deload_reps || 10, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
-        );
-      } else {
-        const warmupSets = levWeek.warmup_sets.map((s, i) => ({ setIndex: i, weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null }));
-        const mainSingle = { setIndex: 0, weight: roundToNearest(levWeek.main_single.tm_pct * tm, 2.5), reps: 1, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null };
-        exercises.push({ exercise_id: mainLift.exercise_id, role: "main", sets: [...warmupSets, mainSingle] });
-        if (levWeek.ssl) {
-          const sslW = roundToNearest(levWeek.ssl.tm_pct * tm, 2.5);
-          exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: `SSL — ${Math.round(levWeek.ssl.tm_pct * 100)}% TM`,
-            sets: Array.from({ length: levWeek.ssl.sets }, (_, i) => ({ setIndex: i, weight: sslW, reps: levWeek.ssl.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
-        }
-        (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
-          exercises.push({ exercise_id: a.exercise_id, role: "assistance",
-            sets: Array.from({ length: a.sets }, (_, i) => ({ setIndex: i, weight: 0, reps: a.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
-        );
-      }
-      return { exercises, week, day, weekLabel: levWeek.week_label, role: inst.current_cycle_role || "leviathan", mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
-    }
-
-    // StrongLifts
-    if (ph.workout_templates) {
-      const patIdx  = (inst.current_day - 1) % ph.session_alternation_pattern.length;
-      const key     = ph.session_alternation_pattern[patIdx];
-      const exercises = ph.workout_templates[key].map(te => {
-        const liftW  = rootSchema.lift_maxes.find(l => l.exercise_id === te.exercise_id)?.one_rm_kg;
-        const fakeW  = liftW ? roundToNearest(liftW * 0.7, 2.5) : 60;
-        const warmups = te.set_scheme_type !== "single_top_set" ? calcWarmupSets(fakeW, tmpl.warmup_protocol.start_weight_kg, tmpl.warmup_protocol.max_warmup_sets) : [{ weight: 20, reps: 5 }];
-        const work   = Array.from({ length: te.sets }, (_, i) => ({ setIndex: i, weight: fakeW, reps: te.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null }));
-        return { exercise_id: te.exercise_id, role: te.role,
-          sets: [...warmups.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...work] };
-      });
-      return { exercises, week: inst.current_week, day: inst.current_day, weekLabel: `Workout ${key}`, role: null, mainLiftId: null, instanceId: inst.id };
-    }
-    return null;
-  }
-
   function startSession() {
     const inst = rootSchema.programme_instances.find(i => i.id === selectedInstId);
     const tmpl = rootSchema.programme_templates.find(t => t.id === inst?.template_id);
     if (!inst || !tmpl) return;
-    const plan = buildSessionPlan(inst, tmpl);
+    const plan = buildSessionPlan(inst, tmpl, rootSchema);
     if (!plan) return;
     setSessionPlan(plan);
     setCurrentExIdx(0);
@@ -1239,9 +1357,12 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
   // ── pick phase ────────────────────────────────────────────────────────────
   if (phase === "pick") {
-    const reviewInst = rootSchema.programme_instances.find(i => i.status === "active" && i.needs_tm_review);
-    const reviewTmpl = reviewInst ? rootSchema.programme_templates.find(t => t.id === reviewInst.template_id) : null;
+    const reviewInst  = rootSchema.programme_instances.find(i => i.status === "active" && i.needs_tm_review);
+    const reviewTmpl  = reviewInst ? rootSchema.programme_templates.find(t => t.id === reviewInst.template_id) : null;
     const activeInsts = rootSchema.programme_instances.filter(i => i.status === "active");
+    const selInst     = activeInsts.find(i => i.id === selectedInstId);
+    const selTmpl     = selInst ? rootSchema.programme_templates.find(t => t.id === selInst.template_id) : null;
+    const preview     = selInst && selTmpl ? previewCycleSessions(selInst, selTmpl, rootSchema, 5) : [];
 
     return (
       <div>
@@ -1269,6 +1390,39 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             })}
           </div>
         </div>
+
+        {preview.length > 0 && (
+          <div style={{ ...S.card, marginBottom: "12px" }}>
+            <div style={S.cardHead}><span style={S.h3}>Upcoming Sessions</span></div>
+            <div style={S.cardBody}>
+              {preview.map(({ plan, isNext }, idx) => (
+                <div key={idx} style={{ marginBottom: idx < preview.length - 1 ? "10px" : 0, paddingBottom: idx < preview.length - 1 ? "10px" : 0, borderBottom: idx < preview.length - 1 ? "1px solid #222" : "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                    {isNext && <span style={{ color: "#88c0d0", fontSize: "11px", letterSpacing: "0.06em" }}>▶ NEXT</span>}
+                    <span style={{ color: isNext ? "#e0e0e0" : "#777", fontSize: "13px", fontWeight: isNext ? "bold" : "normal" }}>
+                      {plan.weekLabel} — Day {plan.day}
+                    </span>
+                    {plan.role && <span style={{ color: "#555", fontSize: "11px" }}>{plan.role}</span>}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {plan.exercises.map((ex, ei) => {
+                      const exInfo = getExercise(ex.exercise_id, rootSchema, exLib);
+                      const workSets = ex.sets.filter(s => !s.isWarmup);
+                      const topSet = workSets[workSets.length - 1];
+                      return (
+                        <div key={ei} style={{ background: "#111", border: "1px solid #2a2a2a", padding: "4px 8px", fontSize: "12px" }}>
+                          <span style={{ color: "#aaa" }}>{exInfo.name}</span>
+                          {topSet && <span style={{ color: "#555", marginLeft: "6px" }}>{workSets.length}×{topSet.reps === "amrap" ? "AMRAP" : topSet.reps} @ {fmtW(topSet.weight, units)}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <button style={{ ...S.btn("primary"), width: "100%", padding: "14px", fontSize: "16px" }}
           onClick={startSession} disabled={!selectedInstId || !!reviewInst}>
           {reviewInst ? "Complete TM review above first" : "Begin Session →"}
@@ -1318,7 +1472,10 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             <div style={S.h1}>{sessionPlan.weekLabel}</div>
             <div style={{ color: "#555", fontSize: "12px", marginTop: "-10px" }}>Day {sessionPlan.day} · {doneEx}/{totalEx} done</div>
           </div>
-          <button style={S.btnSm("danger")} onClick={() => { setPhase("pick"); setResting(false); }}>Abandon</button>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button style={S.btnSm("warning")} onClick={() => { setPhase("summary"); setResting(false); }}>Save</button>
+            <button style={S.btnSm("danger")} onClick={() => { setPhase("pick"); setResting(false); }}>Abandon</button>
+          </div>
         </div>
 
         {/* Timer — rendered ONCE at session level, not inside any card (prevents restart on expand/collapse) */}

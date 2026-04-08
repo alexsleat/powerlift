@@ -1,7 +1,9 @@
 services:
 
   backend:
-    image: ghcr.io/alexsleat/powerlift-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     container_name: powerlift-backend
     environment:
       - NODE_ENV=production
@@ -10,12 +12,15 @@ services:
       - PORT=3001
       # Set COOKIE_SECURE=true if you have HTTPS configured (recommended)
       - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:8080,http://127.0.0.1:8080}
     volumes:
       - powerlift_data:/data
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/alexsleat/powerlift:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: powerlift-frontend
     ports:
       - "${PORT:-8080}:80"
