@@ -2,6 +2,77 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "./api.js";
 import AuthPage from "./AuthPage.jsx";
 
+// ─── THEME ────────────────────────────────────────────────────────────────────
+
+const DARK = {
+  '--bg':              '#0d0d0d',
+  '--surface':         '#171717',
+  '--surface-2':       '#1f1f1f',
+  '--surface-3':       '#272727',
+  '--border':          '#2e2e2e',
+  '--text':            '#e8e8e8',
+  '--text-muted':      '#888888',
+  '--text-dim':        '#505050',
+  '--accent':          '#7ec8dd',
+  '--accent-dim':      '#0c2634',
+  '--success':         '#4ade80',
+  '--success-dim':     '#0c2918',
+  '--danger':          '#f87171',
+  '--danger-dim':      '#290f0f',
+  '--warning':         '#fbbf24',
+  '--warning-dim':     '#291c0a',
+  '--set-done-bg':     '#0c2918',  '--set-done-bdr':    '#1a4a2a',
+  '--set-warmup-bg':   '#0c1629',  '--set-warmup-bdr':  '#1a2a4a',
+  '--set-next-bg':     '#231c00',  '--set-next-bdr':    '#5a4a18',
+  '--set-idle-bg':     '#111111',  '--set-idle-bdr':    '#1e1e1e',
+  '--role-main-bg':    '#1a2a0f',
+  '--role-supp-bg':    '#0f1a2a',
+  '--role-asst-bg':    '#111124',
+  '--card-active-bdr': '#2a5a7a',
+  '--card-done-bdr':   '#2a4a2a',
+};
+
+const LIGHT = {
+  '--bg':              '#f2f2f2',
+  '--surface':         '#ffffff',
+  '--surface-2':       '#f7f7f7',
+  '--surface-3':       '#ededed',
+  '--border':          '#e0e0e0',
+  '--text':            '#1a1a1a',
+  '--text-muted':      '#666666',
+  '--text-dim':        '#aaaaaa',
+  '--accent':          '#0891b2',
+  '--accent-dim':      '#e0f7ff',
+  '--success':         '#16a34a',
+  '--success-dim':     '#dcfce7',
+  '--danger':          '#dc2626',
+  '--danger-dim':      '#fee2e2',
+  '--warning':         '#b45309',
+  '--warning-dim':     '#fef3c7',
+  '--set-done-bg':     '#f0fdf4',  '--set-done-bdr':    '#bbf7d0',
+  '--set-warmup-bg':   '#eff6ff',  '--set-warmup-bdr':  '#bfdbfe',
+  '--set-next-bg':     '#fffde7',  '--set-next-bdr':    '#fde68a',
+  '--set-idle-bg':     '#ffffff',  '--set-idle-bdr':    '#e0e0e0',
+  '--role-main-bg':    '#f0fdf4',
+  '--role-supp-bg':    '#eff6ff',
+  '--role-asst-bg':    '#f5f3ff',
+  '--card-active-bdr': '#0891b2',
+  '--card-done-bdr':   '#16a34a',
+};
+
+function applyTheme(vars) {
+  const root = document.documentElement;
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+}
+
+// Apply initial theme immediately (prevents flash of wrong theme on load)
+{
+  const stored    = localStorage.getItem('pl-theme');
+  const sysDark   = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+  const initDark  = stored === 'light' ? false : stored === 'dark' ? true : sysDark;
+  applyTheme(initDark ? DARK : LIGHT);
+}
+
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 
 function roundToNearest(val, inc) { return Math.round(val / inc) * inc; }
@@ -65,6 +136,8 @@ function getRpeHint(rpe, role) {
   return null;
 }
 
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+
 const PLATE_COLORS = {
   25: "#c0302a", 20: "#2a50c0", 15: "#c0b020", 10: "#30a030",
   5: "#b0b0b0", 2.5: "#404040", 1.25: "#707070",
@@ -78,58 +151,250 @@ const LIFT_META = {
 };
 const DEFAULT_REST = { main: 180, supplemental: 150, assistance: 90 };
 
+const FONT = "ui-monospace,'SFMono-Regular','SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 
 const S = {
-  app:      { fontFamily: "'Courier New', monospace", background: "#0f0f0f", color: "#e0e0e0", minHeight: "100vh", display: "flex", flexDirection: "column" },
-  nav:      { display: "flex", gap: "2px", padding: "6px 8px", background: "#1a1a1a", borderBottom: "1px solid #333", overflowX: "auto", alignItems: "center", WebkitOverflowScrolling: "touch" },
-  navBtn:   (a) => ({ padding: "10px 14px", background: a ? "#e0e0e0" : "#2a2a2a", color: a ? "#0f0f0f" : "#aaa", border: `1px solid ${a ? "#e0e0e0" : "#333"}`, cursor: "pointer", fontSize: "13px", fontFamily: "inherit", letterSpacing: "0.04em", whiteSpace: "nowrap", minHeight: "40px" }),
-  navSep:   { width: "1px", height: "24px", background: "#333", margin: "0 4px", flexShrink: 0 },
-  main:     { flex: 1, display: "flex", overflow: "hidden" },
-  content:  { flex: 1, overflowY: "auto", padding: "14px", WebkitOverflowScrolling: "touch" },
-  card:     { background: "#1a1a1a", border: "1px solid #2a2a2a", marginBottom: "12px" },
-  cardHead: { padding: "10px 14px", background: "#222", borderBottom: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "space-between" },
-  cardBody: { padding: "14px", overflowX: "auto" },
-  h1:       { fontSize: "16px", fontWeight: "bold", color: "#e0e0e0", margin: "0 0 14px", letterSpacing: "0.1em", textTransform: "uppercase" },
-  h3:       { fontSize: "13px", fontWeight: "bold", color: "#aaa", margin: "0", letterSpacing: "0.04em" },
-  label:    { fontSize: "12px", color: "#777", display: "block", marginBottom: "4px", letterSpacing: "0.04em", textTransform: "uppercase" },
-  mono:     { fontFamily: "'Courier New', monospace", fontSize: "13px", color: "#88c0d0" },
-  // inputs are mainly used in non-session areas (Schema tab) — keep them
-  input:    { background: "#0f0f0f", border: "1px solid #444", color: "#e0e0e0", padding: "8px 10px", fontSize: "14px", fontFamily: "inherit", width: "100%", boxSizing: "border-box", minHeight: "40px" },
-  textarea: { background: "#0f0f0f", border: "1px solid #444", color: "#e0e0e0", padding: "10px", fontSize: "13px", fontFamily: "inherit", width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: "80px" },
-  select:   { background: "#0f0f0f", border: "1px solid #444", color: "#e0e0e0", padding: "8px 10px", fontSize: "14px", fontFamily: "inherit", minHeight: "40px" },
+  app: {
+    fontFamily: FONT,
+    background: "var(--bg)",
+    color: "var(--text)",
+    minHeight: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    fontSize: "14px",
+  },
+
+  // ── Header (top bar) ─────────────────────────────────────────────────────
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0 14px",
+    background: "var(--surface)",
+    borderBottom: "1px solid var(--border)",
+    height: "48px",
+    flexShrink: 0,
+    gap: "8px",
+    position: "sticky",
+    top: 0,
+    zIndex: 40,
+  },
+  headerLogo: {
+    fontSize: "14px",
+    fontWeight: "700",
+    color: "var(--text)",
+    letterSpacing: "0.18em",
+    textTransform: "uppercase",
+  },
+  headerActions: { display: "flex", alignItems: "center", gap: "4px" },
+  headerBtn: {
+    background: "transparent",
+    border: "1px solid var(--border)",
+    color: "var(--text-muted)",
+    padding: "5px 10px",
+    cursor: "pointer",
+    fontFamily: FONT,
+    fontSize: "12px",
+    borderRadius: "5px",
+    minHeight: "32px",
+    WebkitTapHighlightColor: "transparent",
+    letterSpacing: "0.04em",
+  },
+
+  // ── Bottom nav ───────────────────────────────────────────────────────────
+  bottomNav: {
+    position: "fixed",
+    bottom: 0, left: 0, right: 0,
+    display: "flex",
+    background: "var(--surface)",
+    borderTop: "1px solid var(--border)",
+    paddingBottom: "env(safe-area-inset-bottom)",
+    zIndex: 50,
+  },
+  navTab: (a) => ({
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "3px",
+    background: "transparent",
+    border: "none",
+    borderTop: `2px solid ${a ? "var(--accent)" : "transparent"}`,
+    color: a ? "var(--accent)" : "var(--text-dim)",
+    cursor: "pointer",
+    fontFamily: FONT,
+    fontSize: "9px",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    padding: "8px 4px",
+    WebkitTapHighlightColor: "transparent",
+    outline: "none",
+    minHeight: "54px",
+  }),
+  navIcon: { fontSize: "17px", lineHeight: "1.2" },
+
+  // ── Layout ───────────────────────────────────────────────────────────────
+  main: { flex: 1, overflow: "hidden" },
+  content: {
+    height: "100%",
+    overflowY: "auto",
+    padding: "16px",
+    paddingBottom: "calc(70px + env(safe-area-inset-bottom))",
+    WebkitOverflowScrolling: "touch",
+    boxSizing: "border-box",
+  },
+
+  // ── Cards ────────────────────────────────────────────────────────────────
+  card: {
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: "8px",
+    marginBottom: "12px",
+    overflow: "hidden",
+  },
+  cardHead: {
+    padding: "12px 16px",
+    background: "var(--surface-2)",
+    borderBottom: "1px solid var(--border)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardBody: { padding: "16px", overflowX: "auto" },
+
+  // ── Typography ───────────────────────────────────────────────────────────
+  h1: {
+    fontSize: "11px",
+    fontWeight: "700",
+    color: "var(--text-dim)",
+    margin: "0 0 16px",
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+  },
+  h3: {
+    fontSize: "11px",
+    fontWeight: "700",
+    color: "var(--text-muted)",
+    margin: "0",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+  label: {
+    fontSize: "11px",
+    color: "var(--text-dim)",
+    display: "block",
+    marginBottom: "5px",
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+  },
+  mono: { fontFamily: FONT, fontSize: "14px", color: "var(--accent)" },
+
+  // ── Form elements (16px prevents iOS auto-zoom) ──────────────────────────
+  input: {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    color: "var(--text)",
+    padding: "10px 12px",
+    fontSize: "16px",
+    fontFamily: FONT,
+    width: "100%",
+    boxSizing: "border-box",
+    minHeight: "44px",
+    borderRadius: "6px",
+    outline: "none",
+  },
+  textarea: {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    color: "var(--text)",
+    padding: "10px 12px",
+    fontSize: "16px",
+    fontFamily: FONT,
+    width: "100%",
+    boxSizing: "border-box",
+    resize: "vertical",
+    minHeight: "80px",
+    borderRadius: "6px",
+    outline: "none",
+  },
+  select: {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    color: "var(--text)",
+    padding: "10px 12px",
+    fontSize: "16px",
+    fontFamily: FONT,
+    minHeight: "44px",
+    borderRadius: "6px",
+    outline: "none",
+  },
+
+  // ── Buttons ──────────────────────────────────────────────────────────────
   btn: (v = "default") => {
     const vs = {
-      default:  { background: "#2a2a2a", color: "#ccc",    border: "1px solid #444" },
-      primary:  { background: "#e0e0e0", color: "#0f0f0f", border: "1px solid #e0e0e0" },
-      danger:   { background: "#2a1a1a", color: "#e06060", border: "1px solid #4a2a2a" },
-      success:  { background: "#1a2a1a", color: "#60e060", border: "1px solid #2a4a2a" },
-      active:   { background: "#1a2a3a", color: "#88c0d0", border: "1px solid #2a4a5a" },
-      warning:  { background: "#2a2a1a", color: "#c0c060", border: "1px solid #4a4a2a" },
-      ghost:    { background: "transparent", color: "#666", border: "1px solid #333" },
+      default:  { background: "var(--surface-2)",  color: "var(--text-muted)", border: "1px solid var(--border)"     },
+      primary:  { background: "var(--text)",        color: "var(--bg)",         border: "none"                        },
+      danger:   { background: "var(--danger-dim)",  color: "var(--danger)",     border: "1px solid var(--danger-dim)" },
+      success:  { background: "var(--success-dim)", color: "var(--success)",    border: "1px solid var(--success-dim)"},
+      active:   { background: "var(--accent-dim)",  color: "var(--accent)",     border: "1px solid var(--accent-dim)" },
+      warning:  { background: "var(--warning-dim)", color: "var(--warning)",    border: "1px solid var(--warning-dim)"},
+      ghost:    { background: "transparent",        color: "var(--text-dim)",   border: "1px solid var(--border)"     },
     };
-    return { ...(vs[v] || vs.default), padding: "10px 16px", cursor: "pointer", fontSize: "14px", fontFamily: "inherit", letterSpacing: "0.04em", minHeight: "40px", WebkitTapHighlightColor: "transparent" };
+    return {
+      ...(vs[v] || vs.default),
+      padding: "10px 18px",
+      cursor: "pointer",
+      fontSize: "14px",
+      fontFamily: FONT,
+      letterSpacing: "0.04em",
+      minHeight: "44px",
+      borderRadius: "6px",
+      WebkitTapHighlightColor: "transparent",
+      fontWeight: "600",
+      touchAction: "manipulation",
+    };
   },
   btnSm: (v = "default") => {
     const vs = {
-      default: { background: "#2a2a2a", color: "#ccc",    border: "1px solid #333" },
-      success: { background: "#1a2a1a", color: "#60e060", border: "1px solid #2a4a2a" },
-      danger:  { background: "#2a1a1a", color: "#e06060", border: "1px solid #4a2a2a" },
-      active:  { background: "#1a2a3a", color: "#88c0d0", border: "1px solid #2a4a5a" },
-      warning: { background: "#2a2a1a", color: "#c0c060", border: "1px solid #4a4a2a" },
+      default: { background: "var(--surface-2)",  color: "var(--text-muted)", border: "1px solid var(--border)"      },
+      success: { background: "var(--success-dim)", color: "var(--success)",   border: "1px solid var(--success-dim)" },
+      danger:  { background: "var(--danger-dim)",  color: "var(--danger)",    border: "1px solid var(--danger-dim)"  },
+      active:  { background: "var(--accent-dim)",  color: "var(--accent)",    border: "1px solid var(--accent-dim)"  },
+      warning: { background: "var(--warning-dim)", color: "var(--warning)",   border: "1px solid var(--warning-dim)" },
+      primary: { background: "var(--text)",        color: "var(--bg)",        border: "none"                         },
+      ghost:   { background: "transparent",        color: "var(--text-dim)",  border: "1px solid var(--border)"      },
     };
-    return { ...(vs[v] || vs.default), padding: "5px 10px", cursor: "pointer", fontSize: "12px", fontFamily: "inherit", letterSpacing: "0.04em", WebkitTapHighlightColor: "transparent" };
+    return {
+      ...(vs[v] || vs.default),
+      padding: "6px 12px",
+      cursor: "pointer",
+      fontSize: "12px",
+      fontFamily: FONT,
+      letterSpacing: "0.04em",
+      borderRadius: "5px",
+      WebkitTapHighlightColor: "transparent",
+      minHeight: "32px",
+      touchAction: "manipulation",
+    };
   },
+
+  // ── Table ────────────────────────────────────────────────────────────────
   table:  { width: "100%", borderCollapse: "collapse", fontSize: "13px" },
-  th:     { padding: "8px 10px", textAlign: "left", background: "#222", color: "#888", borderBottom: "1px solid #2a2a2a", fontSize: "12px", letterSpacing: "0.04em", textTransform: "uppercase" },
-  td:     { padding: "8px 10px", borderBottom: "1px solid #1e1e1e", color: "#ccc", verticalAlign: "middle" },
-  badge:  (c = "#333") => ({ display: "inline-block", background: c, color: "#ccc", padding: "2px 7px", fontSize: "10px", marginRight: "4px", border: "1px solid #555", letterSpacing: "0.06em" }),
+  th:     { padding: "8px 10px", textAlign: "left", background: "var(--surface-2)", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" },
+  td:     { padding: "10px", borderBottom: "1px solid var(--border)", color: "var(--text)", verticalAlign: "middle" },
+
+  // ── Misc ─────────────────────────────────────────────────────────────────
+  badge:  (c = "var(--surface-3)") => ({ display: "inline-flex", alignItems: "center", background: c, color: "var(--text-muted)", padding: "2px 8px", fontSize: "10px", marginRight: "4px", borderRadius: "4px", letterSpacing: "0.06em", fontWeight: "700" }),
   flex:   { display: "flex", alignItems: "center", gap: "8px" },
   grid2:  { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" },
   subNav: { display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" },
-  // Modal overlay
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" },
-  modalBox: { background: "#1a1a1a", border: "1px solid #444", padding: "20px", width: "100%", maxWidth: "340px", boxSizing: "border-box" },
+
+  // ── Modal ────────────────────────────────────────────────────────────────
+  overlay:  { position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" },
+  modalBox: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "24px 20px", width: "100%", maxWidth: "380px", boxSizing: "border-box" },
 };
 
 // ─── MODAL SHELL ──────────────────────────────────────────────────────────────
@@ -137,24 +402,27 @@ const S = {
 function Modal({ onClose, children }) {
   return (
     <div style={S.overlay} onPointerDown={e => e.target === e.currentTarget && onClose()}>
-      <div style={S.modalBox}>
-        {children}
-      </div>
+      <div style={S.modalBox}>{children}</div>
     </div>
   );
 }
 
-// Reusable stepper row: label, - button, value display, + button
+// ─── STEPPER ─────────────────────────────────────────────────────────────────
+
 function Stepper({ label, value, onDec, onInc, display }) {
   return (
-    <div style={{ marginBottom: "16px" }}>
+    <div style={{ marginBottom: "18px" }}>
       <div style={{ ...S.label, marginBottom: "8px" }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: "0" }}>
-        <button style={{ ...S.btn(), minWidth: "52px", fontSize: "22px", padding: "8px 0", borderRight: "none" }} onPointerDown={e => { e.preventDefault(); onDec(); }}> − </button>
-        <div style={{ flex: 1, textAlign: "center", background: "#0f0f0f", border: "1px solid #444", borderLeft: "none", borderRight: "none", padding: "8px 4px", fontSize: "24px", color: "#e0e0e0", letterSpacing: "0.05em" }}>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <button
+          style={{ ...S.btn(), minWidth: "56px", fontSize: "22px", padding: "8px 0", borderRadius: "6px 0 0 6px", borderRight: "none" }}
+          onPointerDown={e => { e.preventDefault(); onDec(); }}>−</button>
+        <div style={{ flex: 1, textAlign: "center", background: "var(--bg)", border: "1px solid var(--border)", borderLeft: "none", borderRight: "none", padding: "8px 4px", fontSize: "24px", color: "var(--text)", letterSpacing: "0.05em" }}>
           {display ?? value}
         </div>
-        <button style={{ ...S.btn(), minWidth: "52px", fontSize: "22px", padding: "8px 0", borderLeft: "none" }} onPointerDown={e => { e.preventDefault(); onInc(); }}> + </button>
+        <button
+          style={{ ...S.btn(), minWidth: "56px", fontSize: "22px", padding: "8px 0", borderRadius: "0 6px 6px 0", borderLeft: "none" }}
+          onPointerDown={e => { e.preventDefault(); onInc(); }}>+</button>
       </div>
     </div>
   );
@@ -167,25 +435,20 @@ function LogSetModal({ set, setLabel, onConfirm, onClose, units, defaultRpe, def
   const [reps,   setReps]   = useState(defaultReps);
   const [rpe,    setRpe]    = useState(defaultRpe ?? 8.0);
   const [weight, setWeight] = useState(dspW(set.weight || 0, units));
-  const inc     = units === "lb" ? 2.5 : 1.25;
-  const bigInc  = units === "lb" ? 5   : 2.5;
-  const rpeStep = 0.5;
+  const inc    = units === "lb" ? 2.5 : 1.25;
+  const bigInc = units === "lb" ? 5   : 2.5;
   const adjW = (delta) => setWeight(v => Math.max(0, Math.round((v + delta) * 100) / 100));
 
   return (
     <Modal onClose={onClose}>
-      <div style={{ ...S.h3, marginBottom: "14px", color: isEdit ? "#c0c060" : "#aaa" }}>
-        {isEdit ? "✎ Edit Set" : setLabel}
+      <div style={{ ...S.h3, marginBottom: "4px", color: isEdit ? "var(--warning)" : "var(--text-muted)" }}>
+        {isEdit ? "Edit Set" : setLabel}
       </div>
-      {isEdit && <div style={{ color: "#666", fontSize: "12px", marginBottom: "12px" }}>{setLabel}</div>}
+      {isEdit && <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>{setLabel}</div>}
 
-      <Stepper label={`Weight (${units})`}
-        value={weight}
-        display={`${weight} ${units}`}
-        onDec={() => adjW(-bigInc)}
-        onInc={() => adjW(bigInc)}
-      />
-      <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
+      <Stepper label={`Weight (${units})`} value={weight} display={`${weight} ${units}`}
+        onDec={() => adjW(-bigInc)} onInc={() => adjW(bigInc)} />
+      <div style={{ display: "flex", gap: "4px", marginBottom: "18px" }}>
         {[-bigInc * 2, -bigInc, -inc, inc, bigInc, bigInc * 2].map(d => (
           <button key={d} style={{ ...S.btnSm(d < 0 ? "danger" : "success"), flex: 1, fontSize: "11px" }}
             onPointerDown={() => adjW(d)}>
@@ -194,19 +457,14 @@ function LogSetModal({ set, setLabel, onConfirm, onClose, units, defaultRpe, def
         ))}
       </div>
 
-      <Stepper label="Reps completed"
-        value={reps}
+      <Stepper label="Reps completed" value={reps}
         onDec={() => setReps(r => Math.max(0, r - 1))}
-        onInc={() => setReps(r => r + 1)}
-      />
+        onInc={() => setReps(r => r + 1)} />
 
       {!set.isWarmup && (
-        <Stepper label={`RPE (${rpe.toFixed(1)})`}
-          value={rpe}
-          display={rpe.toFixed(1)}
-          onDec={() => setRpe(r => Math.max(1, Math.round((r - rpeStep) * 10) / 10))}
-          onInc={() => setRpe(r => Math.min(10, Math.round((r + rpeStep) * 10) / 10))}
-        />
+        <Stepper label={`RPE (${rpe.toFixed(1)})`} value={rpe} display={rpe.toFixed(1)}
+          onDec={() => setRpe(r => Math.max(1, Math.round((r - 0.5) * 10) / 10))}
+          onInc={() => setRpe(r => Math.min(10, Math.round((r + 0.5) * 10) / 10))} />
       )}
 
       <div style={{ display: "flex", gap: "8px" }}>
@@ -214,7 +472,7 @@ function LogSetModal({ set, setLabel, onConfirm, onClose, units, defaultRpe, def
           onPointerDown={() => onConfirm(reps, set.isWarmup ? null : rpe, toKg(weight, units))}>
           {isEdit ? "Update ✓" : "LOG ✓"}
         </button>
-        <button style={{ ...S.btn("ghost"), flex: 0 }} onPointerDown={onClose}>✕</button>
+        <button style={{ ...S.btn("ghost"), flex: 0, minWidth: "44px" }} onPointerDown={onClose}>✕</button>
       </div>
     </Modal>
   );
@@ -223,22 +481,17 @@ function LogSetModal({ set, setLabel, onConfirm, onClose, units, defaultRpe, def
 // ─── EDIT WEIGHT MODAL ────────────────────────────────────────────────────────
 
 function EditWeightModal({ weight, units, onConfirm, onClose }) {
-  const inc  = units === "lb" ? 2.5 : 1.25;
-  const bigInc = units === "lb" ? 5 : 2.5;
+  const inc    = units === "lb" ? 2.5 : 1.25;
+  const bigInc = units === "lb" ? 5   : 2.5;
   const [val, setVal] = useState(dspW(weight || 0, units));
-
   const adj = (delta) => setVal(v => Math.max(0, Math.round((v + delta) * 100) / 100));
 
   return (
     <Modal onClose={onClose}>
-      <div style={{ ...S.h3, marginBottom: "4px", color: "#aaa" }}>Edit Weight</div>
-      <Stepper label={`Weight (${units})`}
-        value={val}
-        display={`${val} ${units}`}
-        onDec={() => adj(-bigInc)}
-        onInc={() => adj(bigInc)}
-      />
-      <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
+      <div style={{ ...S.h3, marginBottom: "16px" }}>Edit Weight</div>
+      <Stepper label={`Weight (${units})`} value={val} display={`${val} ${units}`}
+        onDec={() => adj(-bigInc)} onInc={() => adj(bigInc)} />
+      <div style={{ display: "flex", gap: "4px", marginBottom: "18px" }}>
         {[-bigInc * 2, -bigInc, -inc, inc, bigInc, bigInc * 2].map(d => (
           <button key={d} style={{ ...S.btnSm(d < 0 ? "danger" : "success"), flex: 1, fontSize: "11px" }}
             onPointerDown={() => adj(d)}>
@@ -248,14 +501,10 @@ function EditWeightModal({ weight, units, onConfirm, onClose }) {
       </div>
       <div style={{ display: "flex", gap: "8px" }}>
         <button style={{ ...S.btn("active"), flex: 1 }}
-          onPointerDown={() => onConfirm(toKg(val, units), false)}>
-          This Set
-        </button>
+          onPointerDown={() => onConfirm(toKg(val, units), false)}>This Set</button>
         <button style={{ ...S.btn("primary"), flex: 1 }}
-          onPointerDown={() => onConfirm(toKg(val, units), true)}>
-          All Remaining
-        </button>
-        <button style={{ ...S.btn("ghost"), flex: 0 }} onPointerDown={onClose}>✕</button>
+          onPointerDown={() => onConfirm(toKg(val, units), true)}>All Remaining</button>
+        <button style={{ ...S.btn("ghost"), flex: 0, minWidth: "44px" }} onPointerDown={onClose}>✕</button>
       </div>
     </Modal>
   );
@@ -270,19 +519,18 @@ function JsonViewer({ data, onSave }) {
   const save = () => { try { onSave(JSON.parse(raw)); setError(null); } catch (e) { setError(e.message); } };
   return (
     <div>
-      <div style={{ ...S.flex, marginBottom: "8px", flexWrap: "wrap" }}>
+      <div style={{ ...S.flex, marginBottom: "10px", flexWrap: "wrap" }}>
         <button style={S.btn("primary")} onClick={save}>Apply Changes</button>
         <button style={S.btn()} onClick={() => setRaw(JSON.stringify(data, null, 2))}>Reset</button>
-        {error && <span style={{ color: "#e06060", fontSize: "12px" }}>Error: {error}</span>}
+        {error && <span style={{ color: "var(--danger)", fontSize: "12px" }}>Error: {error}</span>}
       </div>
-      <textarea style={{ ...S.textarea, minHeight: "500px", color: "#88c0d0", fontSize: "11px" }} value={raw} onChange={e => setRaw(e.target.value)} />
+      <textarea style={{ ...S.textarea, minHeight: "500px", color: "var(--accent)", fontSize: "11px" }}
+        value={raw} onChange={e => setRaw(e.target.value)} />
     </div>
   );
 }
 
 // ─── REST TIMER ───────────────────────────────────────────────────────────────
-// Counts up from 0. remaining = target - elapsed. Goes negative after target.
-// Never auto-fires onDone. User skips manually.
 
 function RestTimer({ seconds, onDone }) {
   const [elapsed,  setElapsed]  = useState(0);
@@ -295,19 +543,18 @@ function RestTimer({ seconds, onDone }) {
     return () => clearInterval(iv.current);
   }, [running]);
 
-  const remaining   = seconds - elapsed;
-  const isOvertime  = remaining < 0;
+  const remaining  = seconds - elapsed;
+  const isOvertime = remaining < 0;
   const displaySecs = Math.abs(remaining);
   const mm = String(Math.floor(displaySecs / 60)).padStart(2, "0");
   const ss = String(displaySecs % 60).padStart(2, "0");
   const pct = Math.max(0, (remaining / seconds) * 100);
-
-  const timerColor = isOvertime ? "#e06060" : pct > 40 ? "#60e060" : "#e0c060";
+  const timerColor = isOvertime ? "var(--danger)" : pct > 40 ? "var(--success)" : "var(--warning)";
 
   return (
-    <div style={{ ...S.card, marginBottom: "10px", borderColor: isOvertime ? "#4a2020" : "#2a2a2a" }}>
-      <div style={S.cardHead}>
-        <span style={{ ...S.h3, color: isOvertime ? "#e06060" : "#aaa" }}>
+    <div style={{ ...S.card, marginBottom: "12px", borderColor: isOvertime ? "var(--danger-dim)" : "var(--border)" }}>
+      <div style={{ ...S.cardHead, background: isOvertime ? "var(--danger-dim)" : "var(--surface-2)" }}>
+        <span style={{ ...S.h3, color: isOvertime ? "var(--danger)" : "var(--text-muted)" }}>
           {isOvertime ? `+${mm}:${ss} OVERTIME` : "Rest"}
         </span>
         <div style={S.flex}>
@@ -317,12 +564,12 @@ function RestTimer({ seconds, onDone }) {
           <button style={S.btnSm("primary")} onClick={onDone}>Skip →</button>
         </div>
       </div>
-      <div style={{ padding: "4px 14px 12px" }}>
-        <div style={{ fontSize: "38px", fontFamily: "inherit", color: timerColor, letterSpacing: "0.1em", textAlign: "center", padding: "10px 0" }}>
-          {isOvertime ? <span style={{ fontSize: "20px", color: "#e06060" }}>OVERTIME </span> : ""}{mm}:{ss}
+      <div style={{ padding: "4px 16px 14px" }}>
+        <div style={{ fontSize: "42px", fontFamily: FONT, color: timerColor, letterSpacing: "0.1em", textAlign: "center", padding: "10px 0 8px" }}>
+          {mm}:{ss}
         </div>
-        <div style={{ height: "5px", background: "#222" }}>
-          <div style={{ height: "100%", width: `${pct}%`, background: timerColor, transition: "width 1s linear" }} />
+        <div style={{ height: "4px", background: "var(--surface-3)", borderRadius: "2px" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: timerColor, borderRadius: "2px", transition: "width 1s linear" }} />
         </div>
       </div>
     </div>
@@ -333,7 +580,7 @@ function RestTimer({ seconds, onDone }) {
 
 function LineChart({ points, color }) {
   if (!points || points.length < 2) return (
-    <div style={{ color: "#444", fontSize: "12px", padding: "16px 0", textAlign: "center" }}>Not enough data yet</div>
+    <div style={{ color: "var(--text-dim)", fontSize: "12px", padding: "16px 0", textAlign: "center" }}>Not enough data yet</div>
   );
   const W = 270, H = 90, PAD = { t: 10, b: 18, l: 36, r: 8 };
   const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
@@ -344,14 +591,14 @@ function LineChart({ points, color }) {
   const d  = points.map((p, i) => `${i === 0 ? "M" : "L"} ${tx(i).toFixed(1)} ${ty(p.y).toFixed(1)}`).join(" ");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "90px" }}>
-      <line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b} stroke="#2a2a2a" strokeWidth="1" />
-      <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b} stroke="#2a2a2a" strokeWidth="1" />
-      <text x={PAD.l - 3} y={PAD.t + 4}     fill="#555" fontSize="8" textAnchor="end">{maxY.toFixed(1)}</text>
-      <text x={PAD.l - 3} y={H - PAD.b + 1} fill="#555" fontSize="8" textAnchor="end">{minY.toFixed(1)}</text>
-      <path d={d} fill="none" stroke={color || "#88c0d0"} strokeWidth="1.5" />
-      {points.map((p, i) => <circle key={i} cx={tx(i)} cy={ty(p.y)} r={i === points.length - 1 ? 3 : 1.5} fill={color || "#88c0d0"} />)}
-      <text x={tx(0)} y={H} fill="#444" fontSize="8" textAnchor="middle">{points[0].x}</text>
-      {points.length > 2 && <text x={tx(points.length - 1)} y={H} fill="#444" fontSize="8" textAnchor="middle">{points[points.length - 1].x}</text>}
+      <line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b} stroke="#333" strokeWidth="1" />
+      <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b} stroke="#333" strokeWidth="1" />
+      <text x={PAD.l - 3} y={PAD.t + 4}     fill="#666" fontSize="8" textAnchor="end">{maxY.toFixed(1)}</text>
+      <text x={PAD.l - 3} y={H - PAD.b + 1} fill="#666" fontSize="8" textAnchor="end">{minY.toFixed(1)}</text>
+      <path d={d} fill="none" stroke={color || "var(--accent)"} strokeWidth="1.5" />
+      {points.map((p, i) => <circle key={i} cx={tx(i)} cy={ty(p.y)} r={i === points.length - 1 ? 3 : 1.5} fill={color || "var(--accent)"} />)}
+      <text x={tx(0)} y={H} fill="#555" fontSize="8" textAnchor="middle">{points[0].x}</text>
+      {points.length > 2 && <text x={tx(points.length - 1)} y={H} fill="#555" fontSize="8" textAnchor="middle">{points[points.length - 1].x}</text>}
     </svg>
   );
 }
@@ -370,8 +617,8 @@ function BarChart({ bars, color }) {
         const y  = H - PAD.b - bH;
         return (
           <g key={i}>
-            <rect x={x} y={y} width={bW} height={bH} fill={color || "#2a4a5a"} />
-            {bar.label && <text x={x + bW / 2} y={H - 2} fill="#444" fontSize="7" textAnchor="middle">{bar.label}</text>}
+            <rect x={x} y={y} width={bW} height={bH} fill={color || "#1a3a4a"} />
+            {bar.label && <text x={x + bW / 2} y={H - 2} fill="#555" fontSize="7" textAnchor="middle">{bar.label}</text>}
           </g>
         );
       })}
@@ -387,7 +634,6 @@ function PlateCalculator({ units, sessionContext }) {
   const [target, setTarget] = useState(defTarget);
   const [bar,    setBar]    = useState(defBar);
 
-  // Update target when session context changes (e.g. user switches to Plates tab)
   useEffect(() => {
     if (sessionContext?.weight) setTarget(dspW(sessionContext.weight, units));
   }, [sessionContext?.weight, units]);
@@ -400,13 +646,12 @@ function PlateCalculator({ units, sessionContext }) {
       <div style={S.h1}>Plate Calculator</div>
 
       {sessionContext?.exName && (
-        <div style={{ ...S.card, borderColor: "#2a4a5a", marginBottom: "12px" }}>
-          <div style={{ ...S.cardBody, padding: "10px 14px" }}>
-            <div style={{ color: "#88c0d0", fontSize: "12px", marginBottom: "6px" }}>SESSION — NEXT SET</div>
+        <div style={{ ...S.card, borderColor: "var(--accent-dim)", marginBottom: "12px" }}>
+          <div style={{ ...S.cardBody, padding: "12px 16px" }}>
+            <div style={{ color: "var(--accent)", fontSize: "11px", marginBottom: "6px", letterSpacing: "0.06em", textTransform: "uppercase" }}>Session — Next Set</div>
             <div style={{ ...S.flex, justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
-              <span style={{ color: "#ccc", fontSize: "14px" }}>{sessionContext.exName}</span>
-              <button style={S.btnSm("active")}
-                onClick={() => setTarget(dspW(sessionContext.weight, units))}>
+              <span style={{ color: "var(--text)", fontSize: "14px" }}>{sessionContext.exName}</span>
+              <button style={S.btnSm("active")} onClick={() => setTarget(dspW(sessionContext.weight, units))}>
                 Use {fmtW(sessionContext.weight, units)}
               </button>
             </div>
@@ -432,49 +677,51 @@ function PlateCalculator({ units, sessionContext }) {
           {target > bar ? (
             <>
               <div style={{ display: "flex", alignItems: "flex-end", padding: "12px 0 4px", overflowX: "auto", gap: "2px" }}>
-                <div style={{ width: "18px", height: "8px", background: "#777", flexShrink: 0, alignSelf: "center" }} />
+                <div style={{ width: "18px", height: "8px", background: "var(--text-dim)", flexShrink: 0, alignSelf: "center", borderRadius: "2px" }} />
                 {result.plates.slice().reverse().flatMap((p, i) =>
                   Array.from({ length: p.count }).map((_, j) => {
                     const h = Math.round(14 + (p.weight / maxPlate) * 46);
                     return (
                       <div key={`${i}-${j}`} title={`${p.weight}${units}`} style={{
                         width: "22px", height: `${h}px`, background: PLATE_COLORS[p.weight] || "#505050",
-                        border: "1px solid #111", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center"
+                        border: "1px solid rgba(0,0,0,0.3)", flexShrink: 0,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        borderRadius: "2px",
                       }}>
                         <span style={{ fontSize: "7px", color: "#fff", writingMode: "vertical-rl", transform: "rotate(180deg)" }}>{p.weight}</span>
                       </div>
                     );
                   })
                 )}
-                <div style={{ width: "18px", height: "8px", background: "#777", flexShrink: 0, alignSelf: "center" }} />
+                <div style={{ width: "18px", height: "8px", background: "var(--text-dim)", flexShrink: 0, alignSelf: "center", borderRadius: "2px" }} />
               </div>
 
-              <div style={{ marginTop: "10px" }}>
-                <div style={{ fontSize: "12px", color: "#888", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Per side</div>
+              <div style={{ marginTop: "12px" }}>
+                <div style={{ ...S.label, marginBottom: "8px" }}>Per side</div>
                 {result.plates.length === 0
-                  ? <div style={{ color: "#666", fontSize: "13px" }}>Bar only</div>
+                  ? <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>Bar only</div>
                   : result.plates.map((p, i) => (
-                    <div key={i} style={{ ...S.flex, fontSize: "14px", marginBottom: "4px" }}>
+                    <div key={i} style={{ ...S.flex, fontSize: "14px", marginBottom: "6px" }}>
                       <span style={S.mono}>{p.count}×</span>
-                      <div style={{ width: "14px", height: "14px", background: PLATE_COLORS[p.weight] || "#505050", border: "1px solid #222" }} />
-                      <span style={{ color: "#ccc" }}>{p.weight}{units}</span>
+                      <div style={{ width: "16px", height: "16px", background: PLATE_COLORS[p.weight] || "#505050", borderRadius: "2px" }} />
+                      <span style={{ color: "var(--text)" }}>{p.weight}{units}</span>
                     </div>
                   ))
                 }
                 {result.remainder > 0.05 && (
-                  <div style={{ color: "#e0c060", fontSize: "12px", marginTop: "8px" }}>
+                  <div style={{ color: "var(--warning)", fontSize: "12px", marginTop: "8px" }}>
                     ⚠ {result.remainder.toFixed(2)}{units}/side unloaded
                   </div>
                 )}
               </div>
 
-              <div style={{ borderTop: "1px solid #2a2a2a", marginTop: "14px", paddingTop: "10px", ...S.flex, justifyContent: "space-between" }}>
-                <span style={{ color: "#666", fontSize: "12px" }}>Total loaded</span>
-                <span style={{ ...S.mono, fontSize: "16px" }}>{target}{units}</span>
+              <div style={{ borderTop: "1px solid var(--border)", marginTop: "16px", paddingTop: "12px", ...S.flex, justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-dim)", fontSize: "12px" }}>Total loaded</span>
+                <span style={{ ...S.mono, fontSize: "18px" }}>{target}{units}</span>
               </div>
             </>
           ) : (
-            <div style={{ color: "#555", fontSize: "13px" }}>Target must exceed bar weight.</div>
+            <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>Target must exceed bar weight.</div>
           )}
         </div>
       </div>
@@ -525,7 +772,7 @@ function ProgressView({ rootSchema, units }) {
             {e1rmCharts.map(lift => (
               <div key={lift.id} style={S.card}>
                 <div style={S.cardHead}>
-                  <span style={{ fontWeight: "bold", color: lift.color, fontSize: "13px" }}>{lift.name}</span>
+                  <span style={{ fontWeight: "bold", color: lift.color, fontSize: "12px" }}>{lift.name}</span>
                   {lift.best != null && <span style={{ ...S.mono, fontSize: "12px" }}>Best {lift.best}{units}</span>}
                 </div>
                 <div style={{ padding: "8px" }}>
@@ -535,7 +782,7 @@ function ProgressView({ rootSchema, units }) {
             ))}
           </div>
           {e1rmCharts.every(c => c.points.length < 2) && (
-            <div style={{ color: "#555", fontSize: "13px", textAlign: "center", padding: "24px" }}>
+            <div style={{ color: "var(--text-dim)", fontSize: "13px", textAlign: "center", padding: "32px 0" }}>
               Complete sessions to see progress charts.
             </div>
           )}
@@ -548,8 +795,8 @@ function ProgressView({ rootSchema, units }) {
             <div style={S.cardHead}><span style={S.h3}>Tonnage per session ({units})</span></div>
             <div style={{ padding: "8px" }}>
               {tonnageBars.length > 0
-                ? <BarChart bars={tonnageBars} color="#2a4a5a" />
-                : <div style={{ color: "#555", fontSize: "13px", padding: "16px", textAlign: "center" }}>No sessions logged yet.</div>
+                ? <BarChart bars={tonnageBars} color="var(--accent-dim)" />
+                : <div style={{ color: "var(--text-dim)", fontSize: "13px", padding: "16px", textAlign: "center" }}>No sessions logged yet.</div>
               }
             </div>
           </div>
@@ -612,15 +859,15 @@ function BackupRestore({ rootSchema, exLib, onRestore }) {
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-      <button style={S.btn("primary")} onClick={backup}>⬇ Backup</button>
-      <button style={S.btn()} onClick={() => fileRef.current?.click()}>⬆ Restore</button>
+      <button style={S.btn("primary")} onClick={backup}>⬇ Download Backup</button>
+      <button style={S.btn()} onClick={() => fileRef.current?.click()}>⬆ Restore from File</button>
       <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={restore} />
-      {err && <span style={{ color: "#e06060", fontSize: "12px", alignSelf: "center" }}>Error: {err}</span>}
+      {err && <span style={{ color: "var(--danger)", fontSize: "12px", alignSelf: "center" }}>Error: {err}</span>}
     </div>
   );
 }
 
-// ─── SESSION PLAN BUILDER (module-level so preview can reuse it) ──────────────
+// ─── SESSION PLAN BUILDER (module-level so preview helpers and edit loading can reuse it) ──
 
 function buildSessionPlan(inst, tmpl, rootSchema) {
   const ph   = tmpl.phases[0];
@@ -774,22 +1021,18 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
     <>
       {editing != null && (
         <EditWeightModal
-          weight={editing.new_kg}
-          units={units}
+          weight={editing.new_kg} units={units}
           onClose={() => setEditIdx(null)}
-          onConfirm={(kg) => {
-            setNewTMs(prev => prev.map((t, i) => i === editIdx ? { ...t, new_kg: kg } : t));
-            setEditIdx(null);
-          }}
+          onConfirm={(kg) => { setNewTMs(prev => prev.map((t, i) => i === editIdx ? { ...t, new_kg: kg } : t)); setEditIdx(null); }}
         />
       )}
-      <div style={{ ...S.card, borderColor: "#2a4a2a", marginBottom: "16px" }}>
-        <div style={{ ...S.cardHead, background: "#1a2a1a" }}>
-          <span style={{ fontWeight: "bold", color: "#60e060", fontSize: "14px" }}>Cycle Complete — Review TMs</span>
-          <span style={{ color: "#888", fontSize: "12px" }}>{tmpl?.name}</span>
+      <div style={{ ...S.card, borderColor: "var(--card-done-bdr)", marginBottom: "16px" }}>
+        <div style={{ ...S.cardHead, background: "var(--success-dim)" }}>
+          <span style={{ fontWeight: "bold", color: "var(--success)", fontSize: "13px" }}>Cycle Complete — Review TMs</span>
+          <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>{tmpl?.name}</span>
         </div>
         <div style={S.cardBody}>
-          <div style={{ color: "#888", fontSize: "12px", marginBottom: "12px" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "12px" }}>
             Tap New TM to edit. "Use e1RM" sets TM from your best estimated 1RM ({Math.round(tmPct * 100)}%).
           </div>
           <table style={S.table}>
@@ -808,12 +1051,12 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
                     <td style={S.td}>
                       {bestE1rm ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                          <span style={{ color: "#aaa", fontSize: "13px" }}>{fmtW(bestE1rm, units)}</span>
+                          <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>{fmtW(bestE1rm, units)}</span>
                           <button style={S.btnSm("warning")} onClick={() =>
                             setNewTMs(prev => prev.map((t, j) => j === i ? { ...t, new_kg: fromE1rm } : t))
-                          }>Use →{fmtW(fromE1rm, units)}</button>
+                          }>→{fmtW(fromE1rm, units)}</button>
                         </div>
-                      ) : <span style={{ color: "#444", fontSize: "12px" }}>no data</span>}
+                      ) : <span style={{ color: "var(--text-dim)", fontSize: "12px" }}>no data</span>}
                     </td>
                     <td style={S.td}>
                       <button style={S.btnSm("active")} onClick={() => setEditIdx(i)}>
@@ -843,7 +1086,7 @@ function SchemaSection({ title, children, defaultOpen = true }) {
     <div style={S.card}>
       <div style={{ ...S.cardHead, cursor: "pointer" }} onClick={() => setOpen(o => !o)}>
         <span style={S.h3}>{title}</span>
-        <span style={{ color: "#555", fontSize: "16px" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ color: "var(--text-dim)", fontSize: "14px" }}>{open ? "▲" : "▼"}</span>
       </div>
       {open && <div style={S.cardBody}>{children}</div>}
     </div>
@@ -863,9 +1106,7 @@ function LiftSetsPreview({ exId, tmKg, tmpl, units }) {
     if (!mainLift) return null;
     rows = ph.wave_weeks.map(ww => ({
       label: ww.week_label,
-      sets: ww.core_sets.map(s => ({
-        reps: s.reps, weight: roundToNearest(s.tm_pct * tmKg, 2.5)
-      }))
+      sets: ww.core_sets.map(s => ({ reps: s.reps, weight: roundToNearest(s.tm_pct * tmKg, 2.5) }))
     }));
   } else if (ph.leviathan_weeks && ph.main_lifts) {
     const mainLift = ph.main_lifts.find(l => l.exercise_id === exId);
@@ -879,13 +1120,13 @@ function LiftSetsPreview({ exId, tmKg, tmpl, units }) {
   }
 
   return (
-    <div style={{ background: "#111", border: "1px solid #222", padding: "8px 10px", marginTop: "6px" }}>
-      <div style={{ color: "#555", fontSize: "10px", marginBottom: "5px", letterSpacing: "0.06em" }}>TOP SETS PREVIEW</div>
+    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "10px 12px", marginTop: "8px" }}>
+      <div style={{ ...S.label, marginBottom: "6px" }}>Top sets preview</div>
       {rows.map((row, i) => (
-        <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "3px", flexWrap: "wrap" }}>
-          <span style={{ color: "#555", fontSize: "11px", minWidth: "72px" }}>{row.label}</span>
+        <div key={i} style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "4px", flexWrap: "wrap" }}>
+          <span style={{ color: "var(--text-dim)", fontSize: "11px", minWidth: "72px" }}>{row.label}</span>
           {row.sets.map((s, j) => (
-            <span key={j} style={{ color: "#88c0d0", fontSize: "12px" }}>
+            <span key={j} style={{ color: "var(--accent)", fontSize: "12px" }}>
               {s.reps === "amrap" ? "AMRAP" : s.reps}×{fmtW(s.weight, units)}
             </span>
           ))}
@@ -898,9 +1139,9 @@ function LiftSetsPreview({ exId, tmKg, tmpl, units }) {
 function NewProgrammePanel({ rootSchema, exLib, onChange }) {
   const units = rootSchema.user_profile?.units || "kg";
   const [selectedId, setSelectedId] = useState("");
-  const [step,       setStep]       = useState("template"); // "template" | "maxes"
-  const [inputMode,  setInputMode]  = useState("1rm");      // "1rm" | "tm"
-  const [inputs,     setInputs]     = useState({});         // keyed by exId, values in display units
+  const [step,       setStep]       = useState("template");
+  const [inputMode,  setInputMode]  = useState("1rm");
+  const [inputs,     setInputs]     = useState({});
   const tmpl  = rootSchema.programme_templates.find(t => t.id === selectedId);
   const tmPct = tmpl?.progression_model?.initial_tm_percentage ?? 0.90;
 
@@ -916,7 +1157,6 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
     setInputs(init);
   }
 
-  // Derive the other value from what was entered
   function getOneRmKg(exId) {
     const raw = parseFloat(inputs[exId]);
     if (!raw || raw <= 0) return null;
@@ -965,7 +1205,7 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
     <SchemaSection title="Start New Programme">
       {step === "template" && (
         <>
-          <div style={{ marginBottom: "12px" }}>
+          <div style={{ marginBottom: "14px" }}>
             <label style={S.label}>Template</label>
             <select style={{ ...S.select, width: "100%" }} value={selectedId} onChange={e => handleTemplateSelect(e.target.value)}>
               <option value="">— select —</option>
@@ -973,9 +1213,9 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
             </select>
           </div>
           {tmpl && (
-            <div style={{ fontSize: "12px", color: "#777", marginBottom: "12px" }}>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "14px" }}>
               TMs set at {Math.round(tmPct * 100)}% of 1RM.
-              <div style={{ marginTop: "4px", color: "#555" }}>{tmpl.description}</div>
+              <div style={{ marginTop: "4px", color: "var(--text-dim)" }}>{tmpl.description}</div>
             </div>
           )}
           <button style={S.btn("primary")} onClick={() => setStep("maxes")} disabled={!selectedId}>
@@ -985,25 +1225,25 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
       )}
       {step === "maxes" && tmpl && (
         <>
-          <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
+          <div style={{ display: "flex", gap: "6px", marginBottom: "16px", alignItems: "center", flexWrap: "wrap" }}>
             <button style={S.btnSm(inputMode === "1rm" ? "active" : "default")} onClick={() => setInputMode("1rm")}>Enter 1RM</button>
             <button style={S.btnSm(inputMode === "tm"  ? "active" : "default")} onClick={() => setInputMode("tm")}>Enter TM</button>
-            <span style={{ color: "#555", fontSize: "11px", alignSelf: "center", marginLeft: "4px" }}>TM = {Math.round(tmPct * 100)}% of 1RM</span>
+            <span style={{ color: "var(--text-dim)", fontSize: "11px", marginLeft: "4px" }}>TM = {Math.round(tmPct * 100)}% of 1RM</span>
           </div>
           {exIds.map(exId => {
-            const exInfo = exLib?.exercises?.find(e => e.id === exId) || { name: (LIFT_META[exId]?.name || exId.replace("ex_", "")) };
-            const tmKg   = getTmKg(exId);
+            const exInfo  = exLib?.exercises?.find(e => e.id === exId) || { name: (LIFT_META[exId]?.name || exId.replace("ex_", "")) };
+            const tmKg    = getTmKg(exId);
             const oneRmKg = getOneRmKg(exId);
             const otherVal = inputMode === "1rm"
-              ? (tmKg   ? `TM → ${fmtW(tmKg, units)}`           : null)
+              ? (tmKg    ? `TM → ${fmtW(tmKg, units)}`    : null)
               : (oneRmKg ? `1RM ≈ ${fmtW(oneRmKg, units)}` : null);
             return (
-              <div key={exId} style={{ marginBottom: "16px" }}>
+              <div key={exId} style={{ marginBottom: "18px" }}>
                 <label style={S.label}>{exInfo.name} — {inputMode === "1rm" ? `1RM (${units})` : `Training Max (${units})`}</label>
                 <input style={S.input} type="number" step={units === "lb" ? "5" : "2.5"}
                   value={inputs[exId] ?? ""}
                   onChange={e => setInputs(prev => ({ ...prev, [exId]: e.target.value }))} />
-                {otherVal && <div style={{ color: "#888", fontSize: "11px", marginTop: "3px" }}>{otherVal}</div>}
+                {otherVal && <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "4px" }}>{otherVal}</div>}
                 <LiftSetsPreview exId={exId} tmKg={tmKg} tmpl={tmpl} units={units} />
               </div>
             );
@@ -1018,11 +1258,11 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
   );
 }
 
-// ─── ROOT SCHEMA VIEW ─────────────────────────────────────────────────────────
+// ─── SETTINGS TAB (replaces RootSchemaView + ExerciseLibraryView) ──────────────
 
-function RootSchemaView({ rootSchema, exLib, onChange, onRestore }) {
-  const [view,    setView]    = useState("structured");
-  const [editTmModal, setEditTmModal] = useState(null); // { instId, exId, kg }
+function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, themeOverride, onSetTheme }) {
+  const [sub,         setSub]         = useState("setup");
+  const [editTmModal, setEditTmModal] = useState(null);
   const units    = rootSchema.user_profile?.units || "kg";
   const restDefs = rootSchema.user_profile?.rest_defaults_seconds || DEFAULT_REST;
 
@@ -1051,118 +1291,138 @@ function RootSchemaView({ rootSchema, exLib, onChange, onRestore }) {
     )});
   }
 
-  const liftName = id => LIFT_META[id]?.name || id.replace("ex_", "");
-  const activeInsts   = rootSchema.programme_instances.filter(i => i.status === "active");
-  const archivedInsts = rootSchema.programme_instances.filter(i => i.status === "archived");
+  const liftName     = id => LIFT_META[id]?.name || id.replace("ex_", "");
+  const activeInsts  = rootSchema.programme_instances.filter(i => i.status === "active");
+  const archivedInsts= rootSchema.programme_instances.filter(i => i.status === "archived");
 
   return (
     <>
       {editTmModal && (
         <EditWeightModal
-          weight={editTmModal.kg}
-          units={units}
+          weight={editTmModal.kg} units={units}
           onClose={() => setEditTmModal(null)}
           onConfirm={(kg) => { updateTM(editTmModal.instId, editTmModal.exId, kg); setEditTmModal(null); }}
         />
       )}
-      <div>
-        <div style={{ ...S.flex, marginBottom: "16px" }}>
-          <button style={S.btn(view === "structured" ? "active" : "default")} onClick={() => setView("structured")}>UI</button>
-          <button style={S.btn(view === "json"       ? "active" : "default")} onClick={() => setView("json")}>JSON</button>
-        </div>
+      <div style={S.h1}>Settings</div>
+      <div style={S.subNav}>
+        {[["setup","Setup"],["programmes","Programmes"],["library","Library"],["json","Raw JSON"]].map(([id,label]) => (
+          <button key={id} style={S.btn(sub === id ? "active" : "default")} onClick={() => setSub(id)}>{label}</button>
+        ))}
+      </div>
 
-        {view === "json" ? <JsonViewer data={rootSchema} onSave={onChange} /> : (
-          <>
-            <SchemaSection title="Backup / Restore">
-              <BackupRestore rootSchema={rootSchema} exLib={exLib} onRestore={onRestore} />
-            </SchemaSection>
+      {/* ── Setup ── */}
+      {sub === "setup" && (
+        <>
+          <SchemaSection title="Appearance">
+            <div style={{ marginBottom: "4px", ...S.label }}>Theme</div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button style={S.btn(!themeOverride ? "active" : "default")} onClick={() => onSetTheme(null)}>Auto (system)</button>
+              <button style={S.btn(themeOverride === "light" ? "active" : "default")} onClick={() => onSetTheme("light")}>Light</button>
+              <button style={S.btn(themeOverride === "dark"  ? "active" : "default")} onClick={() => onSetTheme("dark")}>Dark</button>
+            </div>
+          </SchemaSection>
 
-            <SchemaSection title="Profile">
-              <div style={{ marginBottom: "12px" }}>
-                <label style={S.label}>Name</label>
-                <input style={S.input} value={rootSchema.user_profile.name} onChange={e => updateProfile("name", e.target.value)} />
+          <SchemaSection title="Profile">
+            <div style={{ marginBottom: "14px" }}>
+              <label style={S.label}>Name</label>
+              <input style={S.input} value={rootSchema.user_profile.name}
+                onChange={e => updateProfile("name", e.target.value)} />
+            </div>
+          </SchemaSection>
+
+          <SchemaSection title="Rest Timer Defaults" defaultOpen={false}>
+            <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>Seconds of rest after each set type.</div>
+            {[["main", "Main Lift"], ["supplemental", "Supplemental"], ["assistance", "Assistance"]].map(([role, label]) => (
+              <div key={role} style={{ marginBottom: "12px" }}>
+                <label style={S.label}>{label} (seconds)</label>
+                <input style={{ ...S.input, width: "120px" }} type="number" step="15"
+                  value={restDefs[role] ?? DEFAULT_REST[role]}
+                  onChange={e => updateRestDefault(role, e.target.value)} />
               </div>
-            </SchemaSection>
+            ))}
+          </SchemaSection>
 
-            <SchemaSection title="Rest Timer Defaults" defaultOpen={false}>
-              <div style={{ fontSize: "12px", color: "#666", marginBottom: "12px" }}>Seconds of rest after each set type.</div>
-              {[["main", "Main Lift"], ["supplemental", "Supplemental"], ["assistance", "Assistance"]].map(([role, label]) => (
-                <div key={role} style={{ marginBottom: "10px" }}>
-                  <label style={S.label}>{label} (seconds)</label>
-                  <input style={{ ...S.input, width: "100px" }} type="number" step="15"
-                    value={restDefs[role] ?? DEFAULT_REST[role]}
-                    onChange={e => updateRestDefault(role, e.target.value)} />
+          <SchemaSection title="Backup / Restore">
+            <BackupRestore rootSchema={rootSchema} exLib={exLib} onRestore={onRestore} />
+          </SchemaSection>
+        </>
+      )}
+
+      {/* ── Programmes ── */}
+      {sub === "programmes" && (
+        <>
+          <NewProgrammePanel rootSchema={rootSchema} exLib={exLib} onChange={onChange} />
+
+          <SchemaSection title={`Active (${activeInsts.length})`}>
+            {activeInsts.length === 0 && <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>None. Start one above.</div>}
+            {activeInsts.map(inst => {
+              const tmpl = rootSchema.programme_templates.find(t => t.id === inst.template_id);
+              return (
+                <div key={inst.id} style={{ marginBottom: "20px" }}>
+                  <div style={{ ...S.flex, marginBottom: "10px", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
+                    <div>
+                      <div style={{ color: "var(--text)", fontWeight: "bold", fontSize: "14px" }}>{tmpl?.name || inst.template_id}</div>
+                      <div style={{ color: "var(--text-dim)", fontSize: "12px", marginTop: "2px" }}>Cycle {inst.current_cycle} · W{inst.current_week}D{inst.current_day}</div>
+                    </div>
+                    <button style={S.btnSm("warning")} onClick={() => archiveInst(inst.id)}>Archive</button>
+                  </div>
+                  <table style={S.table}>
+                    <thead><tr><th style={S.th}>Lift</th><th style={S.th}>Training Max</th></tr></thead>
+                    <tbody>
+                      {inst.training_maxes.map((tm, i) => (
+                        <tr key={i}>
+                          <td style={S.td}>{liftName(tm.exercise_id)}</td>
+                          <td style={S.td}>
+                            <button style={S.btnSm("active")}
+                              onClick={() => setEditTmModal({ instId: inst.id, exId: tm.exercise_id, kg: tm.tm_kg })}>
+                              {fmtW(tm.tm_kg, units)} ✎
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </SchemaSection>
+              );
+            })}
+          </SchemaSection>
 
-            <NewProgrammePanel rootSchema={rootSchema} exLib={exLib} onChange={onChange} />
-
-            <SchemaSection title={`Active Programmes (${activeInsts.length})`}>
-              {activeInsts.length === 0 && <div style={{ color: "#555", fontSize: "13px" }}>None. Start one above.</div>}
-              {activeInsts.map(inst => {
+          {archivedInsts.length > 0 && (
+            <SchemaSection title={`Archived (${archivedInsts.length})`} defaultOpen={false}>
+              {archivedInsts.map(inst => {
                 const tmpl = rootSchema.programme_templates.find(t => t.id === inst.template_id);
                 return (
-                  <div key={inst.id} style={{ marginBottom: "20px" }}>
-                    <div style={{ ...S.flex, marginBottom: "8px", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
-                      <div>
-                        <div style={{ color: "#ccc", fontWeight: "bold", fontSize: "14px" }}>{tmpl?.name || inst.template_id}</div>
-                        <div style={{ color: "#555", fontSize: "12px" }}>Cycle {inst.current_cycle} · W{inst.current_week}D{inst.current_day}</div>
-                      </div>
-                      <button style={S.btnSm("warning")} onClick={() => archiveInst(inst.id)}>Archive</button>
+                  <div key={inst.id} style={{ ...S.flex, justifyContent: "space-between", marginBottom: "10px", flexWrap: "wrap", gap: "6px" }}>
+                    <div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>{tmpl?.name || inst.template_id}</div>
+                      <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "2px" }}>Started {inst.started_date} · Cycle {inst.current_cycle}</div>
                     </div>
-                    <table style={S.table}>
-                      <thead><tr><th style={S.th}>Lift</th><th style={S.th}>TM</th></tr></thead>
-                      <tbody>
-                        {inst.training_maxes.map((tm, i) => (
-                          <tr key={i}>
-                            <td style={S.td}>{liftName(tm.exercise_id)}</td>
-                            <td style={S.td}>
-                              <button style={S.btnSm("active")}
-                                onClick={() => setEditTmModal({ instId: inst.id, exId: tm.exercise_id, kg: tm.tm_kg })}>
-                                {fmtW(tm.tm_kg, units)} ✎
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <button style={S.btnSm()} onClick={() => restoreInst(inst.id)}>Restore</button>
                   </div>
                 );
               })}
             </SchemaSection>
+          )}
+        </>
+      )}
 
-            {archivedInsts.length > 0 && (
-              <SchemaSection title={`Archived (${archivedInsts.length})`} defaultOpen={false}>
-                {archivedInsts.map(inst => {
-                  const tmpl = rootSchema.programme_templates.find(t => t.id === inst.template_id);
-                  return (
-                    <div key={inst.id} style={{ ...S.flex, justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
-                      <div>
-                        <div style={{ color: "#666", fontSize: "13px" }}>{tmpl?.name || inst.template_id}</div>
-                        <div style={{ color: "#444", fontSize: "11px" }}>Started {inst.started_date} · Cycle {inst.current_cycle}</div>
-                      </div>
-                      <button style={S.btnSm()} onClick={() => restoreInst(inst.id)}>Restore</button>
-                    </div>
-                  );
-                })}
-              </SchemaSection>
-            )}
-          </>
-        )}
-      </div>
+      {/* ── Library ── */}
+      {sub === "library" && (
+        <div>
+          <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>Edit the exercise library JSON directly.</div>
+          <JsonViewer data={exLib} onSave={onExLibChange} />
+        </div>
+      )}
+
+      {/* ── Raw JSON ── */}
+      {sub === "json" && (
+        <div>
+          <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>Edit the full schema JSON directly. Changes apply immediately.</div>
+          <JsonViewer data={rootSchema} onSave={onChange} />
+        </div>
+      )}
     </>
-  );
-}
-
-// ─── EXERCISE LIBRARY VIEW ────────────────────────────────────────────────────
-
-function ExerciseLibraryView({ exLib, onChange }) {
-  return (
-    <div>
-      <div style={S.h1}>Exercise Library</div>
-      <JsonViewer data={exLib} onSave={onChange} />
-    </div>
   );
 }
 
@@ -1172,29 +1432,25 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const units    = rootSchema.user_profile?.units || "kg";
   const restDefs = rootSchema.user_profile?.rest_defaults_seconds || DEFAULT_REST;
 
-  const [phase,          setPhase]          = useState("pick");
-  const [selectedInstId, setSelectedInstId] = useState(() => {
+  const [phase,           setPhase]           = useState("pick");
+  const [selectedInstId,  setSelectedInstId]  = useState(() => {
     const active = rootSchema.programme_instances.find(i => i.status === "active");
     return active?.id || null;
   });
-  const [sessionPlan,    setSessionPlan]    = useState(null);
-  const [currentExIdx,   setCurrentExIdx]   = useState(0);
-  const [expandedSet,    setExpandedSet]    = useState(new Set([0]));
-  const [setResults,     setSetResults]     = useState({});
-  const [weightOverrides,setWeightOverrides]= useState({});
-  const [resting,        setResting]        = useState(false);
-  const [restSeconds,    setRestSeconds]    = useState(180);
-  const [sessionNotes,   setSessionNotes]   = useState("");
-  // Day/week override for session selection
-  const [dayOverride,    setDayOverride]    = useState(null);  // { week, day } or null
-  const [weekWarnShown,  setWeekWarnShown]  = useState(false);
+  const [sessionPlan,     setSessionPlan]     = useState(null);
+  const [currentExIdx,    setCurrentExIdx]    = useState(0);
+  const [expandedSet,     setExpandedSet]     = useState(new Set([0]));
+  const [setResults,      setSetResults]      = useState({});
+  const [weightOverrides, setWeightOverrides] = useState({});
+  const [resting,         setResting]         = useState(false);
+  const [restSeconds,     setRestSeconds]     = useState(180);
+  const [sessionNotes,    setSessionNotes]    = useState("");
+  const [dayOverride,     setDayOverride]     = useState(null);
+  const [weekWarnShown,   setWeekWarnShown]   = useState(false);
+  const [logModal,        setLogModal]        = useState(null);
+  const [weightModal,     setWeightModal]     = useState(null);
+  const [lastRpeByExId,   setLastRpeByExId]   = useState({});
 
-  // Modal state lives here so it survives expand/collapse re-renders
-  const [logModal,    setLogModal]    = useState(null); // { exIdx, setIdx }
-  const [weightModal, setWeightModal] = useState(null); // { exIdx, setIdx, weight }
-  const [lastRpeByExId, setLastRpeByExId] = useState({});
-
-  // When parent passes an editingSession, load it into the session phase
   useEffect(() => {
     if (!editingSession) return;
     const inst = rootSchema.programme_instances.find(i => i.id === editingSession.programme_instance_id)
@@ -1203,17 +1459,13 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const fakeInst = inst ? { ...inst, current_week: editingSession.week || inst.current_week, current_day: editingSession.day || inst.current_day } : null;
     const plan = fakeInst && tmpl ? buildSessionPlan(fakeInst, tmpl, rootSchema) : null;
     if (!plan) return;
-
-    // Pre-populate results from the saved session
     const preResults = {};
     editingSession.exercises_performed?.forEach((ex, exIdx) => {
       ex.set_results?.forEach((s, si) => {
-        if (s.success || s.reps_completed > 0) {
+        if (s.success || s.reps_completed > 0)
           preResults[`${exIdx}-${si}`] = { reps: s.reps_completed, rpe: s.rpe, done: s.success };
-        }
       });
     });
-
     setSelectedInstId(inst?.id || null);
     setSessionPlan({ ...plan, editingSessionId: editingSession.id });
     setSetResults(preResults);
@@ -1225,21 +1477,17 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setPhase("session");
   }, [editingSession]);
 
-  // Notify parent of current context for Plates tab
   useEffect(() => {
     if (phase !== "session" || !sessionPlan) { onContextChange?.(null); return; }
-    const ex   = sessionPlan.exercises[currentExIdx];
+    const ex = sessionPlan.exercises[currentExIdx];
     if (!ex) return;
-    const wc   = ex.sets.filter(s => s.isWarmup).length;
-    // Find next undone work set
+    const wc = ex.sets.filter(s => s.isWarmup).length;
     const nextSetIdx = ex.sets.findIndex((_s, i) => i >= wc && !setResults[`${currentExIdx}-${i}`]?.done);
     const nextSet    = nextSetIdx >= 0 ? ex.sets[nextSetIdx] : null;
     const weight     = nextSet ? (weightOverrides[`${currentExIdx}-${nextSetIdx}`] ?? nextSet.weight) : null;
     const exInfo     = getExercise(ex.exercise_id, rootSchema, exLib);
     onContextChange?.({ weight, exName: exInfo.name });
   }, [phase, sessionPlan, currentExIdx, setResults, weightOverrides]);
-
-  // ── helpers ───────────────────────────────────────────────────────────────
 
   function getEffectiveWeight(exIdx, setIdx, set) {
     return weightOverrides[`${exIdx}-${setIdx}`] ?? set.weight;
@@ -1250,9 +1498,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     if (applyToAll) {
       const updates = {};
       ex.sets.forEach((s, i) => {
-        if (i >= fromSetIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done) {
+        if (i >= fromSetIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done)
           updates[`${exIdx}-${i}`] = newKg;
-        }
       });
       setWeightOverrides(prev => ({ ...prev, ...updates }));
     } else {
@@ -1262,29 +1509,22 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   }
 
   function logSet(exIdx, setIdx, reps, rpe, weightKg) {
-    const ex           = sessionPlan.exercises[exIdx];
-    const exerciseId   = ex.exercise_id;
+    const ex             = sessionPlan.exercises[exIdx];
+    const exerciseId     = ex.exercise_id;
     const wasAlreadyDone = !!setResults[`${exIdx}-${setIdx}`]?.done;
-
-    // If weight was changed in the modal, propagate to this set and all remaining undone work sets
     if (weightKg !== undefined) {
       const updates = {};
       ex.sets.forEach((s, i) => {
-        if (i >= setIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done) {
+        if (i >= setIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done)
           updates[`${exIdx}-${i}`] = weightKg;
-        }
       });
-      // Always update the current set (even if "done" — this is an edit)
       updates[`${exIdx}-${setIdx}`] = weightKg;
       setWeightOverrides(prev => ({ ...prev, ...updates }));
     }
     if (rpe != null) setLastRpeByExId(prev => ({ ...prev, [exerciseId]: rpe }));
     setSetResults(r => ({ ...r, [`${exIdx}-${setIdx}`]: { reps, rpe, done: true } }));
     setLogModal(null);
-
-    // Only advance / trigger rest timer if this is a fresh log (not an edit of a completed set)
     if (wasAlreadyDone) return;
-
     const nextSet = setIdx + 1;
     if (nextSet < ex.sets.length) {
       if (!ex.sets[nextSet].isWarmup) { setRestSeconds(restDefs[ex.role] ?? DEFAULT_REST[ex.role] ?? 120); setResting(true); }
@@ -1313,16 +1553,11 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const plan = buildSessionPlan(inst, tmpl, rootSchema);
     if (!plan) return;
     setSessionPlan(plan);
-    setCurrentExIdx(0);
-    setExpandedSet(new Set([0]));
-    setSetResults({});
-    setWeightOverrides({});
-    setResting(false);
-    setPhase("session");
+    setCurrentExIdx(0); setExpandedSet(new Set([0])); setSetResults({});
+    setWeightOverrides({}); setResting(false); setPhase("session");
   }
 
-  // ── render helpers ────────────────────────────────────────────────────────
-
+  // ── Render: SetRow ──────────────────────────────────────────────────────────
   function SetRow({ exIdx, setIdx, set }) {
     const result       = setResults[`${exIdx}-${setIdx}`];
     const done         = result?.done;
@@ -1333,65 +1568,58 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const setNum       = set.isWarmup ? "W" : (setIdx - numWarmup + 1);
     const weight       = getEffectiveWeight(exIdx, setIdx, set);
     const hint         = done ? getRpeHint(result.rpe, exEntry.role) : null;
-    const isNext       = !done && exIdx === currentExIdx && exSets.slice(0, setIdx).filter(s => !s.isWarmup).every((_, j) => {
-      const wc = numWarmup;
-      return setResults[`${exIdx}-${wc + j}`]?.done;
-    }) && (set.isWarmup || exSets.slice(numWarmup, setIdx).every((_, j) => setResults[`${exIdx}-${numWarmup + j}`]?.done));
+    const isNext = !done && exIdx === currentExIdx &&
+      exSets.slice(0, setIdx).filter(s => !s.isWarmup).every((_, j) => {
+        const wc = numWarmup;
+        return setResults[`${exIdx}-${wc + j}`]?.done;
+      }) && (set.isWarmup || exSets.slice(numWarmup, setIdx).every((_, j) => setResults[`${exIdx}-${numWarmup + j}`]?.done));
 
-    const rowBg     = done ? "#1a2a1a" : set.isWarmup ? "#1a1a2a" : isNext ? "#1e1c14" : "#141414";
-    const rowBorder = done ? "#2a4a2a" : set.isWarmup ? "#2a2a4a" : isNext ? "#6a5a28" : "#1e1e1e";
-
-    // Planned reps & RPE display
+    const rowBg     = done ? "var(--set-done-bg)"   : set.isWarmup ? "var(--set-warmup-bg)"   : isNext ? "var(--set-next-bg)"   : "var(--set-idle-bg)";
+    const rowBorder = done ? "var(--set-done-bdr)"  : set.isWarmup ? "var(--set-warmup-bdr)"  : isNext ? "var(--set-next-bdr)"  : "var(--set-idle-bdr)";
     const plannedReps = set.reps === "amrap" ? "AMRAP" : `${set.reps} reps`;
-    const plannedRpe  = !set.isWarmup && !isAssistance ? "RPE?" : null;
 
     return (
       <>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", marginBottom: "3px", background: rowBg, border: `1px solid ${rowBorder}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px", marginBottom: "4px", background: rowBg, border: `1px solid ${rowBorder}`, borderRadius: "6px" }}>
           {/* Set number */}
-          <div style={{ width: "24px", textAlign: "center", color: "#555", fontSize: "13px", flexShrink: 0 }}>{setNum}</div>
+          <div style={{ width: "22px", textAlign: "center", color: "var(--text-dim)", fontSize: "12px", flexShrink: 0, fontWeight: "600" }}>{setNum}</div>
 
-          {/* Weight — tap to edit (standalone weight modal, pre-log only) */}
+          {/* Weight */}
           <button
-            style={{ background: "transparent", border: "1px solid #2a2a2a", color: weight > 0 ? "#88c0d0" : "#555", padding: "4px 8px", fontSize: "14px", fontFamily: "inherit", cursor: (!done && weight > 0) ? "pointer" : "default", minWidth: "60px", letterSpacing: "0.02em" }}
+            style={{ background: "transparent", border: `1px solid ${done ? rowBorder : "var(--border)"}`, color: weight > 0 ? "var(--accent)" : "var(--text-dim)", padding: "5px 10px", fontSize: "14px", fontFamily: FONT, cursor: (!done && weight > 0) ? "pointer" : "default", minWidth: "64px", borderRadius: "5px", fontWeight: "600" }}
             onClick={() => !done && weight > 0 && setWeightModal({ exIdx, setIdx, weight })}
-            disabled={done || weight === 0}
-          >
+            disabled={done || weight === 0}>
             {weight > 0 ? fmtW(weight, units) : "—"}
           </button>
 
-          {/* Reps — planned or logged */}
-          <div style={{ minWidth: "60px", color: done ? "#c08840" : "#a07030", fontSize: "13px" }}>
+          {/* Reps */}
+          <div style={{ flex: 1, color: done ? "var(--warning)" : "var(--text-muted)", fontSize: "13px" }}>
             {done ? `${result.reps} reps` : plannedReps}
           </div>
 
-          {/* RPE — planned or logged (not for warmups or assistance) */}
+          {/* RPE */}
           {!set.isWarmup && !isAssistance ? (
-            <div style={{ minWidth: "44px", color: done ? "#8888e0" : "#444", fontSize: "12px" }}>
-              {done && result.rpe ? `@${result.rpe}` : plannedRpe}
+            <div style={{ minWidth: "40px", color: done ? "var(--accent)" : "var(--text-dim)", fontSize: "12px", textAlign: "right" }}>
+              {done && result.rpe ? `@${result.rpe}` : "RPE?"}
             </div>
           ) : (
-            <div style={{ minWidth: "44px" }} />
+            <div style={{ minWidth: "40px" }} />
           )}
 
-          {/* Done checkmark (tappable to edit) or LOG button */}
+          {/* Log / Done */}
           {done ? (
             <button
-              style={{ background: "transparent", border: "1px solid #2a4a2a", color: "#60e060", fontSize: "16px", padding: "4px 8px", cursor: "pointer", flexShrink: 0, fontFamily: "inherit" }}
+              style={{ background: "transparent", border: "1px solid var(--card-done-bdr)", color: "var(--success)", fontSize: "18px", padding: "4px 8px", cursor: "pointer", flexShrink: 0, fontFamily: FONT, borderRadius: "5px", minWidth: "40px" }}
               onClick={() => setLogModal({ exIdx, setIdx, editReps: result.reps, editRpe: result.rpe, editWeight: weight })}
-              title="Tap to edit">
-              ✓
-            </button>
+              title="Tap to edit">✓</button>
           ) : (
             <button
-              style={{ ...S.btnSm("success"), minWidth: "48px", fontSize: "13px", padding: "6px 10px", flexShrink: 0 }}
-              onClick={() => setLogModal({ exIdx, setIdx })}>
-              LOG
-            </button>
+              style={{ ...S.btnSm("success"), minWidth: "52px", fontSize: "13px", padding: "7px 12px", flexShrink: 0, fontWeight: "700" }}
+              onClick={() => setLogModal({ exIdx, setIdx })}>LOG</button>
           )}
         </div>
         {hint && (
-          <div style={{ padding: "3px 10px 4px 42px", fontSize: "11px", color: "#c0c060", background: "#1a1a10", marginBottom: "2px" }}>
+          <div style={{ padding: "3px 10px 5px 42px", fontSize: "11px", color: "var(--warning)", background: "var(--warning-dim)", marginBottom: "3px", borderRadius: "0 0 5px 5px" }}>
             ↳ {hint}
           </div>
         )}
@@ -1399,6 +1627,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     );
   }
 
+  // ── Render: ExCard ──────────────────────────────────────────────────────────
   function ExCard({ ex, exIdx }) {
     const isActive   = exIdx === currentExIdx;
     const isExpanded = expandedSet.has(exIdx);
@@ -1407,30 +1636,31 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const workSets   = ex.sets.filter(s => !s.isWarmup);
     const doneCount  = workSets.filter((_, i) => setResults[`${exIdx}-${warmupSets.length + i}`]?.done).length;
     const allDone    = workSets.length > 0 && doneCount === workSets.length;
-    const roleColor  = ex.role === "main" ? "#2a3a1a" : ex.role === "supplemental" ? "#1a2a3a" : "#1a1a2a";
+
+    const roleColor  = ex.role === "main" ? "var(--role-main-bg)" : ex.role === "supplemental" ? "var(--role-supp-bg)" : "var(--role-asst-bg)";
     const roleBadge  = ex.role === "main" ? "MAIN" : ex.role === "supplemental" ? "SUPP" : "ASST";
-    const cardBorder = allDone ? "#2a4a2a" : isActive ? "#4a7a9a" : "#2a2a2a";
+    const cardBorder = allDone ? "var(--card-done-bdr)" : isActive ? "var(--card-active-bdr)" : "var(--border)";
+    const headBg     = allDone ? "var(--success-dim)"   : isActive ? "var(--accent-dim)"       : "var(--surface-2)";
 
     return (
-      <div style={{ ...S.card, borderColor: cardBorder, boxShadow: isActive && !allDone ? "0 0 0 1px #2a5a7a" : "none" }}>
-        <div style={{ ...S.cardHead, cursor: "pointer", background: allDone ? "#182818" : isActive ? "#0e1e2a" : "#1e1e1e", minHeight: "52px", borderBottom: isActive && !allDone ? "1px solid #2a4a6a" : "1px solid #2a2a2a" }}
+      <div style={{ ...S.card, borderColor: cardBorder }}>
+        <div style={{ ...S.cardHead, cursor: "pointer", background: headBg, minHeight: "52px" }}
           onClick={() => toggleExpand(exIdx)}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            {isActive && !allDone && <span style={{ color: "#88c0d0", fontSize: "12px", letterSpacing: "0.08em" }}>▶</span>}
+            {isActive && !allDone && <span style={{ color: "var(--accent)", fontSize: "11px" }}>▶</span>}
             <span style={S.badge(roleColor)}>{roleBadge}</span>
-            <span style={{ fontWeight: "bold", fontSize: "14px", color: allDone ? "#60e060" : isActive ? "#e8e8ff" : "#888" }}>
+            <span style={{ fontWeight: "bold", fontSize: "14px", color: allDone ? "var(--success)" : isActive ? "var(--text)" : "var(--text-muted)" }}>
               {exInfo.name}
             </span>
-            {ex.label && <span style={{ color: "#88c0d0", fontSize: "12px" }}>{ex.label}</span>}
+            {ex.label && <span style={{ color: "var(--accent)", fontSize: "12px" }}>{ex.label}</span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "8px" }}>
-            <span style={{ color: allDone ? "#60e060" : "#555", fontSize: "13px" }}>
+            <span style={{ color: allDone ? "var(--success)" : "var(--text-muted)", fontSize: "13px", fontWeight: "600" }}>
               {allDone ? `✓${workSets.length}` : `${doneCount}/${workSets.length}`}
             </span>
-            <span style={{ color: "#444", fontSize: "14px" }}>{isExpanded ? "▲" : "▼"}</span>
+            <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>{isExpanded ? "▲" : "▼"}</span>
           </div>
         </div>
-        {/* display:none trick preserves DOM/input state */}
         <div style={{ display: isExpanded ? "block" : "none" }}>
           <div style={{ padding: "10px" }}>
             {ex.sets.map((set, setIdx) => (
@@ -1442,29 +1672,24 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     );
   }
 
-  // ── pick phase ────────────────────────────────────────────────────────────
+  // ── Pick phase ──────────────────────────────────────────────────────────────
   if (phase === "pick") {
     const reviewInst  = rootSchema.programme_instances.find(i => i.status === "active" && i.needs_tm_review);
     const reviewTmpl  = reviewInst ? rootSchema.programme_templates.find(t => t.id === reviewInst.template_id) : null;
     const activeInsts = rootSchema.programme_instances.filter(i => i.status === "active");
     const selInst     = activeInsts.find(i => i.id === selectedInstId);
     const selTmpl     = selInst ? rootSchema.programme_templates.find(t => t.id === selInst.template_id) : null;
-
-    // Effective week/day used for preview and session start
     const effectiveWeek = dayOverride?.week ?? selInst?.current_week ?? 1;
     const effectiveDay  = dayOverride?.day  ?? selInst?.current_day  ?? 1;
     const maxDay        = selTmpl?.days_per_week || 4;
     const maxWeek       = selTmpl?.cycle_structure?.mesocycle_weeks || 3;
     const isOverridden  = dayOverride != null;
     const isOtherWeek   = dayOverride && dayOverride.week !== selInst?.current_week;
-
-    // Build preview from effective position
-    const previewInst = selInst ? { ...selInst, current_week: effectiveWeek, current_day: effectiveDay } : null;
-    const preview     = previewInst && selTmpl ? previewCycleSessions(previewInst, selTmpl, rootSchema, 5) : [];
+    const previewInst   = selInst ? { ...selInst, current_week: effectiveWeek, current_day: effectiveDay } : null;
+    const preview       = previewInst && selTmpl ? previewCycleSessions(previewInst, selTmpl, rootSchema, 5) : [];
 
     function handleStartSession() {
       if (dayOverride) {
-        // Temporarily override position for buildSessionPlan, but do NOT advance programme state from a different day
         const inst = rootSchema.programme_instances.find(i => i.id === selectedInstId);
         const tmpl = rootSchema.programme_templates.find(t => t.id === inst?.template_id);
         if (!inst || !tmpl) return;
@@ -1482,24 +1707,28 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     return (
       <div>
         <div style={S.h1}>Start Session</div>
+
         {reviewInst && reviewTmpl && (
           <TmReviewPanel inst={reviewInst} tmpl={reviewTmpl} units={units} rootSchema={rootSchema} onChange={onSchemaChange} />
         )}
+
         <div style={S.card}>
           <div style={S.cardHead}><span style={S.h3}>Active Programmes</span></div>
           <div style={S.cardBody}>
             {activeInsts.length === 0 && (
-              <div style={{ color: "#555", fontSize: "13px" }}>No active programmes. Add one in the Schema tab.</div>
+              <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>No active programmes. Add one in Settings.</div>
             )}
             {activeInsts.map(i => {
               const t = rootSchema.programme_templates.find(t => t.id === i.template_id);
+              const isSelected = selectedInstId === i.id;
               return (
-                <div key={i.id} onClick={() => { setSelectedInstId(i.id); setDayOverride(null); setWeekWarnShown(false); }}
-                  style={{ padding: "12px", marginBottom: "8px", cursor: "pointer", minHeight: "56px",
-                    background: selectedInstId === i.id ? "#1a2a3a" : "#1a1a1a",
-                    border: `1px solid ${selectedInstId === i.id ? "#2a4a5a" : "#2a2a2a"}` }}>
-                  <div style={{ fontWeight: "bold", color: "#e0e0e0", fontSize: "14px" }}>{t?.name || i.template_id}</div>
-                  <div style={{ color: "#777", fontSize: "12px", marginTop: "4px" }}>Cycle {i.current_cycle} · Week {i.current_week} · Day {i.current_day}</div>
+                <div key={i.id}
+                  onClick={() => { setSelectedInstId(i.id); setDayOverride(null); setWeekWarnShown(false); }}
+                  style={{ padding: "14px", marginBottom: "8px", cursor: "pointer", borderRadius: "6px",
+                    background: isSelected ? "var(--accent-dim)" : "var(--surface-2)",
+                    border: `1px solid ${isSelected ? "var(--card-active-bdr)" : "var(--border)"}` }}>
+                  <div style={{ fontWeight: "bold", color: "var(--text)", fontSize: "14px" }}>{t?.name || i.template_id}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "4px" }}>Cycle {i.current_cycle} · Week {i.current_week} · Day {i.current_day}</div>
                 </div>
               );
             })}
@@ -1507,19 +1736,18 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         </div>
 
         {selInst && selTmpl && (
-          <div style={{ ...S.card, marginBottom: "12px" }}>
+          <div style={S.card}>
             <div style={S.cardHead}><span style={S.h3}>Session Select</span></div>
             <div style={S.cardBody}>
-              <div style={{ color: "#666", fontSize: "11px", marginBottom: "10px" }}>
-                Programme is at Week {selInst.current_week} · Day {selInst.current_day}. Select a different session below — this will not change your programme position.
+              <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "12px" }}>
+                Programme is at Week {selInst.current_week} · Day {selInst.current_day}. Choose a different session below — this won't change your programme position.
               </div>
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
                 <div>
                   <label style={S.label}>Week</label>
                   <select style={S.select} value={effectiveWeek} onChange={e => {
                     const w = parseInt(e.target.value);
-                    const needsWarn = w !== selInst.current_week && !weekWarnShown;
-                    if (needsWarn) setWeekWarnShown(true);
+                    if (w !== selInst.current_week && !weekWarnShown) setWeekWarnShown(true);
                     setDayOverride({ week: w, day: effectiveDay });
                   }}>
                     {Array.from({ length: maxWeek }, (_, i) => i + 1).map(w => (
@@ -1529,24 +1757,21 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                 </div>
                 <div>
                   <label style={S.label}>Day</label>
-                  <select style={S.select} value={effectiveDay} onChange={e => {
-                    const d = parseInt(e.target.value);
-                    setDayOverride({ week: effectiveWeek, day: d });
-                  }}>
+                  <select style={S.select} value={effectiveDay} onChange={e => setDayOverride({ week: effectiveWeek, day: parseInt(e.target.value) })}>
                     {Array.from({ length: maxDay }, (_, i) => i + 1).map(d => (
                       <option key={d} value={d}>Day {d}{d === selInst.current_day && effectiveWeek === selInst.current_week ? " (current)" : ""}</option>
                     ))}
                   </select>
                 </div>
                 {isOverridden && (
-                  <button style={{ ...S.btnSm("ghost"), marginTop: "16px" }} onClick={() => { setDayOverride(null); setWeekWarnShown(false); }}>
+                  <button style={{ ...S.btnSm("ghost") }} onClick={() => { setDayOverride(null); setWeekWarnShown(false); }}>
                     Reset to current
                   </button>
                 )}
               </div>
               {isOtherWeek && (
-                <div style={{ color: "#c0c060", fontSize: "11px", marginTop: "8px", background: "#1a1a10", border: "1px solid #4a4a2a", padding: "6px 10px" }}>
-                  ⚠ Week {effectiveWeek} is not your current week. Saving this session will not advance your programme position.
+                <div style={{ color: "var(--warning)", fontSize: "12px", marginTop: "10px", background: "var(--warning-dim)", border: "1px solid var(--border)", padding: "8px 12px", borderRadius: "6px" }}>
+                  ⚠ Week {effectiveWeek} is not your current week. Saving won't advance your programme position.
                 </div>
               )}
             </div>
@@ -1554,27 +1779,27 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         )}
 
         {preview.length > 0 && (
-          <div style={{ ...S.card, marginBottom: "12px" }}>
+          <div style={S.card}>
             <div style={S.cardHead}><span style={S.h3}>{isOverridden ? "Selected Session" : "Upcoming Sessions"}</span></div>
             <div style={S.cardBody}>
               {preview.map(({ plan, isNext }, idx) => (
-                <div key={idx} style={{ marginBottom: idx < preview.length - 1 ? "10px" : 0, paddingBottom: idx < preview.length - 1 ? "10px" : 0, borderBottom: idx < preview.length - 1 ? "1px solid #222" : "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                    {isNext && <span style={{ color: "#88c0d0", fontSize: "11px", letterSpacing: "0.06em" }}>▶ {isOverridden ? "SELECTED" : "NEXT"}</span>}
-                    <span style={{ color: isNext ? "#e0e0e0" : "#777", fontSize: "13px", fontWeight: isNext ? "bold" : "normal" }}>
+                <div key={idx} style={{ marginBottom: idx < preview.length - 1 ? "12px" : 0, paddingBottom: idx < preview.length - 1 ? "12px" : 0, borderBottom: idx < preview.length - 1 ? "1px solid var(--border)" : "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                    {isNext && <span style={{ color: "var(--accent)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>▶ {isOverridden ? "Selected" : "Next"}</span>}
+                    <span style={{ color: isNext ? "var(--text)" : "var(--text-muted)", fontSize: "13px", fontWeight: isNext ? "bold" : "normal" }}>
                       {plan.weekLabel} — Day {plan.day}
                     </span>
-                    {plan.role && <span style={{ color: "#555", fontSize: "11px" }}>{plan.role}</span>}
+                    {plan.role && <span style={{ color: "var(--text-dim)", fontSize: "11px" }}>{plan.role}</span>}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                     {plan.exercises.map((ex, ei) => {
-                      const exInfo = getExercise(ex.exercise_id, rootSchema, exLib);
+                      const exInfo   = getExercise(ex.exercise_id, rootSchema, exLib);
                       const workSets = ex.sets.filter(s => !s.isWarmup);
-                      const topSet = workSets[workSets.length - 1];
+                      const topSet   = workSets[workSets.length - 1];
                       return (
-                        <div key={ei} style={{ background: "#111", border: "1px solid #2a2a2a", padding: "4px 8px", fontSize: "12px" }}>
-                          <span style={{ color: "#aaa" }}>{exInfo.name}</span>
-                          {topSet && <span style={{ color: "#555", marginLeft: "6px" }}>{workSets.length}×{topSet.reps === "amrap" ? "AMRAP" : topSet.reps} @ {fmtW(topSet.weight, units)}</span>}
+                        <div key={ei} style={{ background: "var(--bg)", border: "1px solid var(--border)", padding: "5px 10px", fontSize: "12px", borderRadius: "5px" }}>
+                          <span style={{ color: "var(--text-muted)" }}>{exInfo.name}</span>
+                          {topSet && <span style={{ color: "var(--text-dim)", marginLeft: "6px" }}>{workSets.length}×{topSet.reps === "amrap" ? "AMRAP" : topSet.reps} @ {fmtW(topSet.weight, units)}</span>}
                         </div>
                       );
                     })}
@@ -1585,7 +1810,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
         )}
 
-        <button style={{ ...S.btn("primary"), width: "100%", padding: "14px", fontSize: "16px" }}
+        <button style={{ ...S.btn("primary"), width: "100%", padding: "16px", fontSize: "16px" }}
           onClick={handleStartSession} disabled={!selectedInstId || !!reviewInst}>
           {reviewInst ? "Complete TM review above first" : "Begin Session →"}
         </button>
@@ -1593,7 +1818,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     );
   }
 
-  // ── session phase ─────────────────────────────────────────────────────────
+  // ── Session phase ───────────────────────────────────────────────────────────
   if (phase === "session" && sessionPlan) {
     const totalEx = sessionPlan.exercises.length;
     const doneEx  = sessionPlan.exercises.filter((ex, i) => {
@@ -1606,7 +1831,6 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
     return (
       <div>
-        {/* Modals — rendered outside card hierarchy so they don't remount with cards */}
         {logModal && logModalData && (
           <LogSetModal
             set={{ ...logModalData, weight: logModal.editWeight ?? getEffectiveWeight(logModal.exIdx, logModal.setIdx, logModalData) }}
@@ -1621,29 +1845,26 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         )}
         {weightModal && weightModalData && (
           <EditWeightModal
-            weight={weightModal.weight}
-            units={units}
+            weight={weightModal.weight} units={units}
             onClose={() => setWeightModal(null)}
             onConfirm={(kg, applyAll) => applyWeightOverride(weightModal.exIdx, weightModal.setIdx, kg, applyAll)}
           />
         )}
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px", gap: "8px" }}>
+        {/* Session header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "14px", gap: "8px" }}>
           <div>
-            <div style={S.h1}>{sessionPlan.weekLabel}</div>
-            <div style={{ color: "#555", fontSize: "12px", marginTop: "-10px" }}>Day {sessionPlan.day} · {doneEx}/{totalEx} done</div>
+            <div style={{ fontSize: "18px", fontWeight: "700", color: "var(--text)", letterSpacing: "0.04em" }}>{sessionPlan.weekLabel}</div>
+            <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "2px" }}>Day {sessionPlan.day} · {doneEx}/{totalEx} exercises</div>
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
             <button style={S.btnSm("warning")} onClick={() => { setPhase("summary"); setResting(false); }}>Save</button>
-            <button style={S.btnSm("danger")} onClick={() => { setPhase("pick"); setResting(false); }}>Abandon</button>
+            <button style={S.btnSm("danger")}  onClick={() => { setPhase("pick");    setResting(false); }}>Abandon</button>
           </div>
         </div>
 
-        {/* Timer — rendered ONCE at session level, not inside any card (prevents restart on expand/collapse) */}
         {resting && <RestTimer key={`rest-${currentExIdx}`} seconds={restSeconds} onDone={() => setResting(false)} />}
 
-        {/* Exercise cards */}
         {sessionPlan.exercises.map((ex, exIdx) => (
           <ExCard key={exIdx} ex={ex} exIdx={exIdx} />
         ))}
@@ -1651,16 +1872,18 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     );
   }
 
-  // ── summary phase ─────────────────────────────────────────────────────────
+  // ── Summary phase ───────────────────────────────────────────────────────────
   if (phase === "summary") {
-    const isEdit = !!sessionPlan?.editingSessionId;
+    const isEdit            = !!sessionPlan?.editingSessionId;
     const isOverrideSession = !!sessionPlan?.overriddenFromWeek;
     return (
       <div>
-        <div style={S.h1}>{isEdit ? "Edit Session" : "Session Complete"}</div>
+        <div style={{ fontSize: "18px", fontWeight: "700", color: "var(--text)", marginBottom: "16px", letterSpacing: "0.04em" }}>
+          {isEdit ? "Edit Session" : "Session Complete"}
+        </div>
         {isOverrideSession && (
-          <div style={{ color: "#888", fontSize: "12px", background: "#1a1a10", border: "1px solid #333", padding: "8px 12px", marginBottom: "12px" }}>
-            This session (Week {sessionPlan.week} · Day {sessionPlan.day}) will be saved without advancing your programme position.
+          <div style={{ color: "var(--text-muted)", fontSize: "12px", background: "var(--warning-dim)", border: "1px solid var(--border)", padding: "10px 14px", borderRadius: "6px", marginBottom: "14px" }}>
+            Week {sessionPlan.week} · Day {sessionPlan.day} — saved without advancing programme position.
           </div>
         )}
         <div style={S.card}>
@@ -1669,35 +1892,26 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             <textarea style={S.textarea} value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} placeholder="Session notes..." />
           </div>
         </div>
-        <button style={{ ...S.btn("primary"), width: "100%", padding: "14px", fontSize: "16px" }}
+        <button style={{ ...S.btn("primary"), width: "100%", padding: "16px", fontSize: "16px" }}
           onClick={() => {
             const planWithWeights = {
               ...sessionPlan,
               exercises: sessionPlan.exercises.map((ex, exIdx) => ({
-                ...ex,
-                sets: ex.sets.map((set, setIdx) => ({
-                  ...set, weight: getEffectiveWeight(exIdx, setIdx, set)
-                }))
+                ...ex, sets: ex.sets.map((set, setIdx) => ({ ...set, weight: getEffectiveWeight(exIdx, setIdx, set) }))
               }))
             };
             onSessionComplete({
-              plan: planWithWeights,
-              results: setResults,
-              notes: sessionNotes,
+              plan: planWithWeights, results: setResults, notes: sessionNotes,
               editingSessionId: sessionPlan.editingSessionId ?? null,
               skipProgression: isOverrideSession || isEdit,
             });
-            setDayOverride(null);
-            setWeekWarnShown(false);
-            onEditDone?.();
-            setPhase("pick");
+            setDayOverride(null); setWeekWarnShown(false);
+            onEditDone?.(); setPhase("pick");
           }}>
           {isEdit ? "Update Session" : "Save Session"}
         </button>
         <button style={{ ...S.btn("ghost"), width: "100%", marginTop: "8px" }}
-          onClick={() => setPhase("session")}>
-          ← Back to session
-        </button>
+          onClick={() => setPhase("session")}>← Back to session</button>
       </div>
     );
   }
@@ -1737,7 +1951,7 @@ function HistoryTab({ rootSchema, exLib, onEditSession }) {
     return (
       <div>
         <div style={S.h1}>History</div>
-        <div style={{ color: "#555", fontSize: "13px" }}>No sessions recorded yet.</div>
+        <div style={{ color: "var(--text-dim)", fontSize: "13px", textAlign: "center", padding: "40px 0" }}>No sessions recorded yet.</div>
       </div>
     );
   }
@@ -1746,39 +1960,46 @@ function HistoryTab({ rootSchema, exLib, onEditSession }) {
     <div>
       <div style={S.h1}>History</div>
       {sessions.map(session => {
-        const isOpen  = expanded === session.id;
-        const totals  = sessionSummary(session);
-        const name    = instName(session);
+        const isOpen = expanded === session.id;
+        const totals = sessionSummary(session);
+        const name   = instName(session);
         return (
           <div key={session.id} style={{ ...S.card, marginBottom: "8px" }}>
             <div style={{ ...S.cardHead, cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : session.id)}>
-              <div>
-                <div style={{ fontWeight: "bold", color: "#e0e0e0", fontSize: "13px" }}>{session.date}  <span style={{ color: "#555", fontWeight: "normal" }}>{name}</span></div>
-                <div style={{ color: "#666", fontSize: "11px", marginTop: "2px" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "13px" }}>
+                  {session.date}
+                  <span style={{ color: "var(--text-muted)", fontWeight: "normal", marginLeft: "8px" }}>{name}</span>
+                </div>
+                <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "3px" }}>
                   {session.week ? `Wk ${session.week} · Day ${session.day}` : ""}
-                  {totals.sets > 0 ? `  ·  ${totals.sets} sets · ${Math.round(totals.kg)}${units} volume` : ""}
+                  {totals.sets > 0 ? `  ·  ${totals.sets} sets · ${Math.round(totals.kg)}${units}` : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
                 <button style={S.btnSm("warning")} onPointerDown={e => { e.stopPropagation(); onEditSession(session); }}>Edit</button>
-                <span style={{ color: "#444" }}>{isOpen ? "▲" : "▼"}</span>
+                <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>{isOpen ? "▲" : "▼"}</span>
               </div>
             </div>
             {isOpen && (
               <div style={S.cardBody}>
-                {session.notes && <div style={{ color: "#888", fontSize: "12px", marginBottom: "10px", fontStyle: "italic" }}>"{session.notes}"</div>}
+                {session.notes && (
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "12px", fontStyle: "italic", padding: "8px 12px", background: "var(--bg)", borderRadius: "5px" }}>
+                    "{session.notes}"
+                  </div>
+                )}
                 {session.exercises_performed?.map((ex, ei) => {
-                  const exInfo = getExercise(ex.exercise_id, rootSchema, exLib);
+                  const exInfo   = getExercise(ex.exercise_id, rootSchema, exLib);
                   const workSets = ex.set_results?.filter(s => !s.is_warmup) || [];
                   return (
-                    <div key={ei} style={{ marginBottom: "10px" }}>
-                      <div style={{ color: "#aaa", fontSize: "12px", marginBottom: "4px", letterSpacing: "0.04em" }}>{exInfo.name}</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                    <div key={ei} style={{ marginBottom: "12px" }}>
+                      <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "6px", fontWeight: "600", letterSpacing: "0.04em" }}>{exInfo.name}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
                         {workSets.map((s, si) => (
-                          <div key={si} style={{ background: s.success ? "#1a2a1a" : "#2a1a1a", border: `1px solid ${s.success ? "#2a4a2a" : "#4a2a2a"}`, padding: "3px 7px", fontSize: "12px" }}>
-                            <span style={{ color: "#88c0d0" }}>{fmtW(s.weight_kg, units)}</span>
-                            <span style={{ color: s.success ? "#60e060" : "#e06060", marginLeft: "5px" }}>{s.reps_completed}×</span>
-                            {s.rpe ? <span style={{ color: "#8888e0", marginLeft: "4px" }}>@{s.rpe}</span> : null}
+                          <div key={si} style={{ background: s.success ? "var(--set-done-bg)" : "var(--danger-dim)", border: `1px solid ${s.success ? "var(--set-done-bdr)" : "var(--danger-dim)"}`, padding: "4px 9px", fontSize: "12px", borderRadius: "5px" }}>
+                            <span style={{ color: "var(--accent)" }}>{fmtW(s.weight_kg, units)}</span>
+                            <span style={{ color: s.success ? "var(--success)" : "var(--danger)", marginLeft: "5px" }}>{s.reps_completed}×</span>
+                            {s.rpe ? <span style={{ color: "var(--text-muted)", marginLeft: "4px" }}>@{s.rpe}</span> : null}
                           </div>
                         ))}
                       </div>
@@ -1801,20 +2022,29 @@ export default function App() {
   const [exLib,          setExLib]          = useState(null);
   const [activeTab,      setActiveTab]      = useState("session");
   const [loading,        setLoading]        = useState(true);
-  const [sessionContext, setSessionContext] = useState(null); // { weight, exName } for Plates tab
-  const [editingSession, setEditingSession] = useState(null); // session object to edit
+  const [sessionContext, setSessionContext] = useState(null);
+  const [editingSession, setEditingSession] = useState(null);
   const [user,           setUser]           = useState(null);
   const [authChecked,    setAuthChecked]    = useState(false);
 
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  const [themeOverride, setThemeOverride] = useState(() => localStorage.getItem('pl-theme'));
+  const sysDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+  const isDark  = themeOverride ? themeOverride === 'dark' : sysDark;
+
+  useEffect(() => {
+    applyTheme(isDark ? DARK : LIGHT);
+    if (themeOverride) localStorage.setItem('pl-theme', themeOverride);
+    else               localStorage.removeItem('pl-theme');
+  }, [isDark, themeOverride]);
+
+  function handleSetTheme(val) { setThemeOverride(val); }
+
+  // ── Auth + data load ──────────────────────────────────────────────────────
   useEffect(() => {
     async function init() {
-      // Try to silently restore the session using the httpOnly refresh-token cookie
       const authData = await api.auth.refresh();
-      if (!authData) {
-        setAuthChecked(true);
-        setLoading(false);
-        return;
-      }
+      if (!authData) { setAuthChecked(true); setLoading(false); return; }
       api.setToken(authData.accessToken);
       setUser(authData.user);
       await loadAppData();
@@ -1827,9 +2057,7 @@ export default function App() {
   async function loadAppData() {
     try {
       const [schemaData, exercisesData, templatesData] = await Promise.all([
-        api.data.schema(),
-        api.data.exercises(),
-        api.data.templates(),
+        api.data.schema(), api.data.exercises(), api.data.templates(),
       ]);
       schemaData.programme_templates = templatesData;
       setRootSchema(schemaData);
@@ -1847,16 +2075,13 @@ export default function App() {
   }
 
   async function handleLogout() {
-    try { await api.auth.logout(); } catch { /* ignore network errors on logout */ }
+    try { await api.auth.logout(); } catch { /* ignore */ }
     api.clearToken();
-    setUser(null);
-    setRootSchema(null);
-    setExLib(null);
+    setUser(null); setRootSchema(null); setExLib(null);
   }
 
   function updateSchema(newSchema) {
     setRootSchema(newSchema);
-    // Fire-and-forget — UI updates immediately, server syncs in background
     api.data.putSchema(newSchema).catch(err => console.error("Schema sync failed:", err));
   }
   function updateExLib(newLib) {
@@ -1893,9 +2118,9 @@ export default function App() {
       })
     }));
 
-    const ts = Date.now();
+    const ts        = Date.now();
     const sessionId = editingSessionId ?? `session_${dateStr}_${ts}`;
-    const newE1rms = [];
+    const newE1rms  = [];
     exercisesPerformed.forEach(ex =>
       ex.set_results.filter(s => !s.is_warmup && s.e1rm_kg).forEach(s =>
         newE1rms.push({ exercise_id: ex.exercise_id, session_id: sessionId, weight_kg: s.weight_kg, reps_completed: s.reps_completed, formula_used: "epley", e1rm_kg: s.e1rm_kg })
@@ -1909,10 +2134,8 @@ export default function App() {
       week: plan.week, day: plan.day, notes, exercises_performed: exercisesPerformed
     };
 
-    // Replace existing session if editing, otherwise append
     const prevSessions = rootSchema.workout_sessions.filter(s => s.id !== sessionId);
-    // Remove old e1rm entries for this session if editing
-    const prevE1rms = rootSchema.e1rm_log.filter(e => e.session_id !== sessionId);
+    const prevE1rms    = rootSchema.e1rm_log.filter(e => e.session_id !== sessionId);
 
     let newInsts = [...rootSchema.programme_instances];
     if (inst && !skipProgression) {
@@ -1939,43 +2162,55 @@ export default function App() {
     });
   }
 
-  if (!authChecked || loading) return <div style={{ color: "#aaa", padding: "24px", fontFamily: "monospace", fontSize: "14px" }}>Loading...</div>;
+  // ── Loading / auth gate ───────────────────────────────────────────────────
+  if (!authChecked || loading) {
+    return (
+      <div style={{ ...S.app, alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+        <div style={{ color: "var(--text-muted)", fontSize: "13px", letterSpacing: "0.1em" }}>LOADING...</div>
+      </div>
+    );
+  }
   if (!user) return <AuthPage onLogin={handleLogin} />;
 
   const units = rootSchema.user_profile?.units || "kg";
-  const tabs  = [
-    { id: "session",  label: "▶ Run"     },
-    { id: "history",  label: "⏱ History" },
-    { id: "plates",   label: "⊞ Plates"  },
-    { id: "progress", label: "↗ Stats"   },
-    { id: "root",     label: "⚙ Schema"  },
-    { id: "exlib",    label: "Ex Lib"    },
+
+  const tabs = [
+    { id: "session",  icon: "▶",  label: "Run"      },
+    { id: "history",  icon: "≡",  label: "History"  },
+    { id: "progress", icon: "↗",  label: "Stats"    },
+    { id: "plates",   icon: "⊞",  label: "Plates"   },
+    { id: "settings", icon: "⚙",  label: "Settings" },
   ];
 
   return (
     <div style={S.app}>
-      <nav style={S.nav}>
-        {tabs.map(t => (
-          <button key={t.id} style={S.navBtn(activeTab === t.id)} onClick={() => setActiveTab(t.id)}>{t.label}</button>
-        ))}
-        <div style={{ flex: 1, minWidth: "4px" }} />
-        <div style={S.navSep} />
-        <button style={{ ...S.navBtn(false), minWidth: "44px" }} onClick={toggleUnits} title="Toggle kg / lb">
-          {units.toUpperCase()}
-        </button>
-        <div style={S.navSep} />
-        <button style={{ ...S.navBtn(false), fontSize: "12px", minWidth: "52px" }} onClick={handleLogout} title={`Logout (${user.username})`}>
-          ⏻ Out
-        </button>
-      </nav>
 
+      {/* ── Top header ─────────────────────────────────────────────────────── */}
+      <header style={S.header}>
+        <span style={S.headerLogo}>Powerlift</span>
+        <div style={S.headerActions}>
+          <button style={S.headerBtn} onClick={() => setThemeOverride(isDark ? "light" : "dark")} title="Toggle theme">
+            {isDark ? "○" : "●"}
+          </button>
+          {rootSchema && (
+            <button style={S.headerBtn} onClick={toggleUnits} title="Toggle kg / lb">
+              {units.toUpperCase()}
+            </button>
+          )}
+          <button style={{ ...S.headerBtn, color: "var(--danger)", borderColor: "var(--danger-dim)" }}
+            onClick={handleLogout} title={`Logout (${user.username})`}>
+            ⏻
+          </button>
+        </div>
+      </header>
+
+      {/* ── Main content ───────────────────────────────────────────────────── */}
       <div style={S.main}>
         <div style={S.content}>
-          {/* SessionRunner is ALWAYS mounted (just hidden) so session state persists across tab switches */}
+          {/* SessionRunner always mounted to preserve in-session state */}
           <div style={{ display: activeTab === "session" ? "block" : "none" }}>
             <SessionRunner
-              rootSchema={rootSchema}
-              exLib={exLib}
+              rootSchema={rootSchema} exLib={exLib}
               onSessionComplete={handleSessionComplete}
               onSchemaChange={updateSchema}
               onContextChange={setSessionContext}
@@ -1985,12 +2220,28 @@ export default function App() {
           </div>
 
           {activeTab === "history"  && <HistoryTab rootSchema={rootSchema} exLib={exLib} onEditSession={s => { setEditingSession(s); setActiveTab("session"); }} />}
-          {activeTab === "plates"   && <PlateCalculator units={units} sessionContext={sessionContext} />}
           {activeTab === "progress" && <ProgressView rootSchema={rootSchema} units={units} />}
-          {activeTab === "root"     && <RootSchemaView rootSchema={rootSchema} exLib={exLib} onChange={updateSchema} onRestore={handleRestore} />}
-          {activeTab === "exlib"    && <ExerciseLibraryView exLib={exLib} onChange={updateExLib} />}
+          {activeTab === "plates"   && <PlateCalculator units={units} sessionContext={sessionContext} />}
+          {activeTab === "settings" && (
+            <SettingsTab
+              rootSchema={rootSchema} exLib={exLib}
+              onChange={updateSchema} onExLibChange={updateExLib} onRestore={handleRestore}
+              themeOverride={themeOverride} isDark={isDark} onSetTheme={handleSetTheme}
+            />
+          )}
         </div>
       </div>
+
+      {/* ── Bottom tab bar ─────────────────────────────────────────────────── */}
+      <nav style={S.bottomNav}>
+        {tabs.map(t => (
+          <button key={t.id} style={S.navTab(activeTab === t.id)} onClick={() => setActiveTab(t.id)}>
+            <span style={S.navIcon}>{t.icon}</span>
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </nav>
+
     </div>
   );
 }
