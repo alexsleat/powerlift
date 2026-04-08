@@ -852,42 +852,94 @@ function SchemaSection({ title, children, defaultOpen = true }) {
 
 // ─── NEW PROGRAMME PANEL ──────────────────────────────────────────────────────
 
+function LiftSetsPreview({ exId, tmKg, tmpl, units }) {
+  if (!tmKg || tmKg <= 0 || !tmpl) return null;
+  const ph = tmpl.phases?.[0];
+  if (!ph) return null;
+
+  let rows = [];
+  if (ph.wave_weeks && ph.main_lifts) {
+    const mainLift = ph.main_lifts.find(l => l.exercise_id === exId);
+    if (!mainLift) return null;
+    rows = ph.wave_weeks.map(ww => ({
+      label: ww.week_label,
+      sets: ww.core_sets.map(s => ({
+        reps: s.reps, weight: roundToNearest(s.tm_pct * tmKg, 2.5)
+      }))
+    }));
+  } else if (ph.leviathan_weeks && ph.main_lifts) {
+    const mainLift = ph.main_lifts.find(l => l.exercise_id === exId);
+    if (!mainLift) return null;
+    rows = ph.leviathan_weeks.filter(w => !w.is_deload).map(w => ({
+      label: w.week_label,
+      sets: [{ reps: 1, weight: roundToNearest(w.main_single.tm_pct * tmKg, 2.5) }]
+    }));
+  } else {
+    return null;
+  }
+
+  return (
+    <div style={{ background: "#111", border: "1px solid #222", padding: "8px 10px", marginTop: "6px" }}>
+      <div style={{ color: "#555", fontSize: "10px", marginBottom: "5px", letterSpacing: "0.06em" }}>TOP SETS PREVIEW</div>
+      {rows.map((row, i) => (
+        <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "3px", flexWrap: "wrap" }}>
+          <span style={{ color: "#555", fontSize: "11px", minWidth: "72px" }}>{row.label}</span>
+          {row.sets.map((s, j) => (
+            <span key={j} style={{ color: "#88c0d0", fontSize: "12px" }}>
+              {s.reps === "amrap" ? "AMRAP" : s.reps}×{fmtW(s.weight, units)}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NewProgrammePanel({ rootSchema, exLib, onChange }) {
   const units = rootSchema.user_profile?.units || "kg";
   const [selectedId, setSelectedId] = useState("");
   const [step,       setStep]       = useState("template"); // "template" | "maxes"
-  const [maxInputs,  setMaxInputs]  = useState({});
-  const tmpl = rootSchema.programme_templates.find(t => t.id === selectedId);
+  const [inputMode,  setInputMode]  = useState("1rm");      // "1rm" | "tm"
+  const [inputs,     setInputs]     = useState({});         // keyed by exId, values in display units
+  const tmpl  = rootSchema.programme_templates.find(t => t.id === selectedId);
+  const tmPct = tmpl?.progression_model?.initial_tm_percentage ?? 0.90;
 
   function handleTemplateSelect(id) {
     setSelectedId(id);
     const t = rootSchema.programme_templates.find(t => t.id === id);
     const exIds = getTemplateExercises(t);
-    const inputs = {};
+    const init = {};
     exIds.forEach(exId => {
       const existing = rootSchema.lift_maxes.find(l => l.exercise_id === exId);
-      inputs[exId] = existing ? String(dspW(existing.one_rm_kg, units)) : "";
+      init[exId] = existing ? String(dspW(existing.one_rm_kg, units)) : "";
     });
-    setMaxInputs(inputs);
+    setInputs(init);
+  }
+
+  // Derive the other value from what was entered
+  function getOneRmKg(exId) {
+    const raw = parseFloat(inputs[exId]);
+    if (!raw || raw <= 0) return null;
+    const kg = toKg(raw, units);
+    return inputMode === "1rm" ? kg : roundToNearest(kg / tmPct, 2.5);
+  }
+  function getTmKg(exId) {
+    const oneRm = getOneRmKg(exId);
+    return oneRm ? roundToNearest(oneRm * tmPct, 2.5) : null;
   }
 
   function start() {
     if (!tmpl) return;
-    const tmPct = tmpl.progression_model?.initial_tm_percentage ?? 0.90;
     const today = new Date().toISOString().split("T")[0];
     const exIds = getTemplateExercises(tmpl);
-
-    // Update lift_maxes with entered values
     let newLiftMaxes = [...rootSchema.lift_maxes];
     exIds.forEach(exId => {
-      const raw = parseFloat(maxInputs[exId]);
-      if (!raw || raw <= 0) return;
-      const kg = toKg(raw, units);
+      const oneRmKg = getOneRmKg(exId);
+      if (!oneRmKg) return;
       const idx = newLiftMaxes.findIndex(l => l.exercise_id === exId);
-      const entry = { exercise_id: exId, one_rm_kg: kg, tested_date: today, method: "manual" };
+      const entry = { exercise_id: exId, one_rm_kg: oneRmKg, tested_date: today, method: "manual" };
       if (idx >= 0) newLiftMaxes[idx] = entry; else newLiftMaxes.push(entry);
     });
-
     const training_maxes = newLiftMaxes
       .filter(lm => exIds.length === 0 || exIds.includes(lm.exercise_id))
       .map(lm => ({
@@ -895,7 +947,6 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
         tm_kg: roundToNearest(lm.one_rm_kg * tmPct, 2.5),
         last_updated: today, cycle_when_set: 1
       }));
-
     const newInst = {
       id: `prog_inst_${Date.now()}`, template_id: selectedId, status: "active",
       started_date: today,
@@ -905,7 +956,7 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
       training_maxes, failure_tracking: [], phase_history: [], needs_tm_review: false
     };
     onChange({ ...rootSchema, lift_maxes: newLiftMaxes, programme_instances: [...rootSchema.programme_instances, newInst] });
-    setSelectedId(""); setStep("template"); setMaxInputs({});
+    setSelectedId(""); setStep("template"); setInputs({});
   }
 
   const exIds = getTemplateExercises(tmpl);
@@ -923,7 +974,7 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
           </div>
           {tmpl && (
             <div style={{ fontSize: "12px", color: "#777", marginBottom: "12px" }}>
-              TMs will be set at {Math.round((tmpl.progression_model?.initial_tm_percentage ?? 0.9) * 100)}% of your 1RMs.
+              TMs set at {Math.round(tmPct * 100)}% of 1RM.
               <div style={{ marginTop: "4px", color: "#555" }}>{tmpl.description}</div>
             </div>
           )}
@@ -934,24 +985,26 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
       )}
       {step === "maxes" && tmpl && (
         <>
-          <div style={{ color: "#aaa", fontSize: "12px", marginBottom: "14px" }}>
-            Enter your current 1RM for each lift. Leave blank to skip. TMs set at {Math.round((tmpl.progression_model?.initial_tm_percentage ?? 0.9) * 100)}%.
+          <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
+            <button style={S.btnSm(inputMode === "1rm" ? "active" : "default")} onClick={() => setInputMode("1rm")}>Enter 1RM</button>
+            <button style={S.btnSm(inputMode === "tm"  ? "active" : "default")} onClick={() => setInputMode("tm")}>Enter TM</button>
+            <span style={{ color: "#555", fontSize: "11px", alignSelf: "center", marginLeft: "4px" }}>TM = {Math.round(tmPct * 100)}% of 1RM</span>
           </div>
           {exIds.map(exId => {
             const exInfo = exLib?.exercises?.find(e => e.id === exId) || { name: (LIFT_META[exId]?.name || exId.replace("ex_", "")) };
-            const raw = parseFloat(maxInputs[exId]);
-            const tmPreview = raw > 0 ? roundToNearest(toKg(raw, units) * (tmpl.progression_model?.initial_tm_percentage ?? 0.9), 2.5) : null;
+            const tmKg   = getTmKg(exId);
+            const oneRmKg = getOneRmKg(exId);
+            const otherVal = inputMode === "1rm"
+              ? (tmKg   ? `TM → ${fmtW(tmKg, units)}`           : null)
+              : (oneRmKg ? `1RM ≈ ${fmtW(oneRmKg, units)}` : null);
             return (
-              <div key={exId} style={{ marginBottom: "14px" }}>
-                <label style={S.label}>{exInfo.name} 1RM ({units})</label>
+              <div key={exId} style={{ marginBottom: "16px" }}>
+                <label style={S.label}>{exInfo.name} — {inputMode === "1rm" ? `1RM (${units})` : `Training Max (${units})`}</label>
                 <input style={S.input} type="number" step={units === "lb" ? "5" : "2.5"}
-                  value={maxInputs[exId] ?? ""}
-                  onChange={e => setMaxInputs(prev => ({ ...prev, [exId]: e.target.value }))} />
-                {tmPreview && (
-                  <div style={{ color: "#555", fontSize: "11px", marginTop: "3px" }}>
-                    Training max → {fmtW(tmPreview, units)}
-                  </div>
-                )}
+                  value={inputs[exId] ?? ""}
+                  onChange={e => setInputs(prev => ({ ...prev, [exId]: e.target.value }))} />
+                {otherVal && <div style={{ color: "#888", fontSize: "11px", marginTop: "3px" }}>{otherVal}</div>}
+                <LiftSetsPreview exId={exId} tmKg={tmKg} tmpl={tmpl} units={units} />
               </div>
             );
           })}
@@ -1115,7 +1168,7 @@ function ExerciseLibraryView({ exLib, onChange }) {
 
 // ─── SESSION RUNNER ───────────────────────────────────────────────────────────
 
-function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, onContextChange }) {
+function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, onContextChange, editingSession, onEditDone }) {
   const units    = rootSchema.user_profile?.units || "kg";
   const restDefs = rootSchema.user_profile?.rest_defaults_seconds || DEFAULT_REST;
 
@@ -1132,11 +1185,45 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const [resting,        setResting]        = useState(false);
   const [restSeconds,    setRestSeconds]    = useState(180);
   const [sessionNotes,   setSessionNotes]   = useState("");
+  // Day/week override for session selection
+  const [dayOverride,    setDayOverride]    = useState(null);  // { week, day } or null
+  const [weekWarnShown,  setWeekWarnShown]  = useState(false);
 
   // Modal state lives here so it survives expand/collapse re-renders
   const [logModal,    setLogModal]    = useState(null); // { exIdx, setIdx }
   const [weightModal, setWeightModal] = useState(null); // { exIdx, setIdx, weight }
   const [lastRpeByExId, setLastRpeByExId] = useState({});
+
+  // When parent passes an editingSession, load it into the session phase
+  useEffect(() => {
+    if (!editingSession) return;
+    const inst = rootSchema.programme_instances.find(i => i.id === editingSession.programme_instance_id)
+              || rootSchema.programme_instances.find(i => i.status === "active");
+    const tmpl = inst ? rootSchema.programme_templates.find(t => t.id === inst.template_id) : null;
+    const fakeInst = inst ? { ...inst, current_week: editingSession.week || inst.current_week, current_day: editingSession.day || inst.current_day } : null;
+    const plan = fakeInst && tmpl ? buildSessionPlan(fakeInst, tmpl, rootSchema) : null;
+    if (!plan) return;
+
+    // Pre-populate results from the saved session
+    const preResults = {};
+    editingSession.exercises_performed?.forEach((ex, exIdx) => {
+      ex.set_results?.forEach((s, si) => {
+        if (s.success || s.reps_completed > 0) {
+          preResults[`${exIdx}-${si}`] = { reps: s.reps_completed, rpe: s.rpe, done: s.success };
+        }
+      });
+    });
+
+    setSelectedInstId(inst?.id || null);
+    setSessionPlan({ ...plan, editingSessionId: editingSession.id });
+    setSetResults(preResults);
+    setWeightOverrides({});
+    setCurrentExIdx(0);
+    setExpandedSet(new Set([0]));
+    setSessionNotes(editingSession.notes || "");
+    setResting(false);
+    setPhase("session");
+  }, [editingSession]);
 
   // Notify parent of current context for Plates tab
   useEffect(() => {
@@ -1362,7 +1449,35 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const activeInsts = rootSchema.programme_instances.filter(i => i.status === "active");
     const selInst     = activeInsts.find(i => i.id === selectedInstId);
     const selTmpl     = selInst ? rootSchema.programme_templates.find(t => t.id === selInst.template_id) : null;
-    const preview     = selInst && selTmpl ? previewCycleSessions(selInst, selTmpl, rootSchema, 5) : [];
+
+    // Effective week/day used for preview and session start
+    const effectiveWeek = dayOverride?.week ?? selInst?.current_week ?? 1;
+    const effectiveDay  = dayOverride?.day  ?? selInst?.current_day  ?? 1;
+    const maxDay        = selTmpl?.days_per_week || 4;
+    const maxWeek       = selTmpl?.cycle_structure?.mesocycle_weeks || 3;
+    const isOverridden  = dayOverride != null;
+    const isOtherWeek   = dayOverride && dayOverride.week !== selInst?.current_week;
+
+    // Build preview from effective position
+    const previewInst = selInst ? { ...selInst, current_week: effectiveWeek, current_day: effectiveDay } : null;
+    const preview     = previewInst && selTmpl ? previewCycleSessions(previewInst, selTmpl, rootSchema, 5) : [];
+
+    function handleStartSession() {
+      if (dayOverride) {
+        // Temporarily override position for buildSessionPlan, but do NOT advance programme state from a different day
+        const inst = rootSchema.programme_instances.find(i => i.id === selectedInstId);
+        const tmpl = rootSchema.programme_templates.find(t => t.id === inst?.template_id);
+        if (!inst || !tmpl) return;
+        const fakeInst = { ...inst, current_week: dayOverride.week, current_day: dayOverride.day };
+        const plan = buildSessionPlan(fakeInst, tmpl, rootSchema);
+        if (!plan) return;
+        setSessionPlan({ ...plan, overriddenFromWeek: inst.current_week, overriddenFromDay: inst.current_day });
+        setCurrentExIdx(0); setExpandedSet(new Set([0])); setSetResults({});
+        setWeightOverrides({}); setResting(false); setPhase("session");
+      } else {
+        startSession();
+      }
+    }
 
     return (
       <div>
@@ -1379,7 +1494,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             {activeInsts.map(i => {
               const t = rootSchema.programme_templates.find(t => t.id === i.template_id);
               return (
-                <div key={i.id} onClick={() => setSelectedInstId(i.id)}
+                <div key={i.id} onClick={() => { setSelectedInstId(i.id); setDayOverride(null); setWeekWarnShown(false); }}
                   style={{ padding: "12px", marginBottom: "8px", cursor: "pointer", minHeight: "56px",
                     background: selectedInstId === i.id ? "#1a2a3a" : "#1a1a1a",
                     border: `1px solid ${selectedInstId === i.id ? "#2a4a5a" : "#2a2a2a"}` }}>
@@ -1391,14 +1506,61 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
         </div>
 
+        {selInst && selTmpl && (
+          <div style={{ ...S.card, marginBottom: "12px" }}>
+            <div style={S.cardHead}><span style={S.h3}>Session Select</span></div>
+            <div style={S.cardBody}>
+              <div style={{ color: "#666", fontSize: "11px", marginBottom: "10px" }}>
+                Programme is at Week {selInst.current_week} · Day {selInst.current_day}. Select a different session below — this will not change your programme position.
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <label style={S.label}>Week</label>
+                  <select style={S.select} value={effectiveWeek} onChange={e => {
+                    const w = parseInt(e.target.value);
+                    const needsWarn = w !== selInst.current_week && !weekWarnShown;
+                    if (needsWarn) setWeekWarnShown(true);
+                    setDayOverride({ week: w, day: effectiveDay });
+                  }}>
+                    {Array.from({ length: maxWeek }, (_, i) => i + 1).map(w => (
+                      <option key={w} value={w}>Week {w}{w === selInst.current_week ? " (current)" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>Day</label>
+                  <select style={S.select} value={effectiveDay} onChange={e => {
+                    const d = parseInt(e.target.value);
+                    setDayOverride({ week: effectiveWeek, day: d });
+                  }}>
+                    {Array.from({ length: maxDay }, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>Day {d}{d === selInst.current_day && effectiveWeek === selInst.current_week ? " (current)" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+                {isOverridden && (
+                  <button style={{ ...S.btnSm("ghost"), marginTop: "16px" }} onClick={() => { setDayOverride(null); setWeekWarnShown(false); }}>
+                    Reset to current
+                  </button>
+                )}
+              </div>
+              {isOtherWeek && (
+                <div style={{ color: "#c0c060", fontSize: "11px", marginTop: "8px", background: "#1a1a10", border: "1px solid #4a4a2a", padding: "6px 10px" }}>
+                  ⚠ Week {effectiveWeek} is not your current week. Saving this session will not advance your programme position.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {preview.length > 0 && (
           <div style={{ ...S.card, marginBottom: "12px" }}>
-            <div style={S.cardHead}><span style={S.h3}>Upcoming Sessions</span></div>
+            <div style={S.cardHead}><span style={S.h3}>{isOverridden ? "Selected Session" : "Upcoming Sessions"}</span></div>
             <div style={S.cardBody}>
               {preview.map(({ plan, isNext }, idx) => (
                 <div key={idx} style={{ marginBottom: idx < preview.length - 1 ? "10px" : 0, paddingBottom: idx < preview.length - 1 ? "10px" : 0, borderBottom: idx < preview.length - 1 ? "1px solid #222" : "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                    {isNext && <span style={{ color: "#88c0d0", fontSize: "11px", letterSpacing: "0.06em" }}>▶ NEXT</span>}
+                    {isNext && <span style={{ color: "#88c0d0", fontSize: "11px", letterSpacing: "0.06em" }}>▶ {isOverridden ? "SELECTED" : "NEXT"}</span>}
                     <span style={{ color: isNext ? "#e0e0e0" : "#777", fontSize: "13px", fontWeight: isNext ? "bold" : "normal" }}>
                       {plan.weekLabel} — Day {plan.day}
                     </span>
@@ -1424,7 +1586,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         )}
 
         <button style={{ ...S.btn("primary"), width: "100%", padding: "14px", fontSize: "16px" }}
-          onClick={startSession} disabled={!selectedInstId || !!reviewInst}>
+          onClick={handleStartSession} disabled={!selectedInstId || !!reviewInst}>
           {reviewInst ? "Complete TM review above first" : "Begin Session →"}
         </button>
       </div>
@@ -1491,9 +1653,16 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
   // ── summary phase ─────────────────────────────────────────────────────────
   if (phase === "summary") {
+    const isEdit = !!sessionPlan?.editingSessionId;
+    const isOverrideSession = !!sessionPlan?.overriddenFromWeek;
     return (
       <div>
-        <div style={S.h1}>Session Complete</div>
+        <div style={S.h1}>{isEdit ? "Edit Session" : "Session Complete"}</div>
+        {isOverrideSession && (
+          <div style={{ color: "#888", fontSize: "12px", background: "#1a1a10", border: "1px solid #333", padding: "8px 12px", marginBottom: "12px" }}>
+            This session (Week {sessionPlan.week} · Day {sessionPlan.day}) will be saved without advancing your programme position.
+          </div>
+        )}
         <div style={S.card}>
           <div style={S.cardBody}>
             <label style={S.label}>Notes</label>
@@ -1502,7 +1671,6 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         </div>
         <button style={{ ...S.btn("primary"), width: "100%", padding: "14px", fontSize: "16px" }}
           onClick={() => {
-            // Bake weight overrides into plan before saving
             const planWithWeights = {
               ...sessionPlan,
               exercises: sessionPlan.exercises.map((ex, exIdx) => ({
@@ -1512,16 +1680,118 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                 }))
               }))
             };
-            onSessionComplete({ plan: planWithWeights, results: setResults, notes: sessionNotes });
+            onSessionComplete({
+              plan: planWithWeights,
+              results: setResults,
+              notes: sessionNotes,
+              editingSessionId: sessionPlan.editingSessionId ?? null,
+              skipProgression: isOverrideSession || isEdit,
+            });
+            setDayOverride(null);
+            setWeekWarnShown(false);
+            onEditDone?.();
             setPhase("pick");
           }}>
-          Save Session
+          {isEdit ? "Update Session" : "Save Session"}
+        </button>
+        <button style={{ ...S.btn("ghost"), width: "100%", marginTop: "8px" }}
+          onClick={() => setPhase("session")}>
+          ← Back to session
         </button>
       </div>
     );
   }
 
   return null;
+}
+
+// ─── HISTORY TAB ─────────────────────────────────────────────────────────────
+
+function HistoryTab({ rootSchema, exLib, onEditSession }) {
+  const units = rootSchema.user_profile?.units || "kg";
+  const [expanded, setExpanded] = useState(null);
+
+  const sessions = [...(rootSchema.workout_sessions || [])]
+    .sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+
+  function instName(session) {
+    const inst = rootSchema.programme_instances?.find(i => i.id === session.programme_instance_id);
+    const tmpl = inst ? rootSchema.programme_templates?.find(t => t.id === inst.template_id) : null;
+    return tmpl?.name || inst?.template_id || "Free session";
+  }
+
+  function sessionSummary(session) {
+    const totals = { sets: 0, reps: 0, kg: 0 };
+    session.exercises_performed?.forEach(ex =>
+      ex.set_results?.forEach(s => {
+        if (!s.is_warmup && s.success) {
+          totals.sets++; totals.reps += s.reps_completed || 0;
+          totals.kg += (s.weight_kg || 0) * (s.reps_completed || 0);
+        }
+      })
+    );
+    return totals;
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <div>
+        <div style={S.h1}>History</div>
+        <div style={{ color: "#555", fontSize: "13px" }}>No sessions recorded yet.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={S.h1}>History</div>
+      {sessions.map(session => {
+        const isOpen  = expanded === session.id;
+        const totals  = sessionSummary(session);
+        const name    = instName(session);
+        return (
+          <div key={session.id} style={{ ...S.card, marginBottom: "8px" }}>
+            <div style={{ ...S.cardHead, cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : session.id)}>
+              <div>
+                <div style={{ fontWeight: "bold", color: "#e0e0e0", fontSize: "13px" }}>{session.date}  <span style={{ color: "#555", fontWeight: "normal" }}>{name}</span></div>
+                <div style={{ color: "#666", fontSize: "11px", marginTop: "2px" }}>
+                  {session.week ? `Wk ${session.week} · Day ${session.day}` : ""}
+                  {totals.sets > 0 ? `  ·  ${totals.sets} sets · ${Math.round(totals.kg)}${units} volume` : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <button style={S.btnSm("warning")} onPointerDown={e => { e.stopPropagation(); onEditSession(session); }}>Edit</button>
+                <span style={{ color: "#444" }}>{isOpen ? "▲" : "▼"}</span>
+              </div>
+            </div>
+            {isOpen && (
+              <div style={S.cardBody}>
+                {session.notes && <div style={{ color: "#888", fontSize: "12px", marginBottom: "10px", fontStyle: "italic" }}>"{session.notes}"</div>}
+                {session.exercises_performed?.map((ex, ei) => {
+                  const exInfo = getExercise(ex.exercise_id, rootSchema, exLib);
+                  const workSets = ex.set_results?.filter(s => !s.is_warmup) || [];
+                  return (
+                    <div key={ei} style={{ marginBottom: "10px" }}>
+                      <div style={{ color: "#aaa", fontSize: "12px", marginBottom: "4px", letterSpacing: "0.04em" }}>{exInfo.name}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                        {workSets.map((s, si) => (
+                          <div key={si} style={{ background: s.success ? "#1a2a1a" : "#2a1a1a", border: `1px solid ${s.success ? "#2a4a2a" : "#4a2a2a"}`, padding: "3px 7px", fontSize: "12px" }}>
+                            <span style={{ color: "#88c0d0" }}>{fmtW(s.weight_kg, units)}</span>
+                            <span style={{ color: s.success ? "#60e060" : "#e06060", marginLeft: "5px" }}>{s.reps_completed}×</span>
+                            {s.rpe ? <span style={{ color: "#8888e0", marginLeft: "4px" }}>@{s.rpe}</span> : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
@@ -1532,6 +1802,7 @@ export default function App() {
   const [activeTab,      setActiveTab]      = useState("session");
   const [loading,        setLoading]        = useState(true);
   const [sessionContext, setSessionContext] = useState(null); // { weight, exName } for Plates tab
+  const [editingSession, setEditingSession] = useState(null); // session object to edit
   const [user,           setUser]           = useState(null);
   const [authChecked,    setAuthChecked]    = useState(false);
 
@@ -1602,7 +1873,7 @@ export default function App() {
     updateSchema({ ...rootSchema, user_profile: { ...rootSchema.user_profile, units: newUnits } });
   }
 
-  function handleSessionComplete({ plan, results, notes }) {
+  function handleSessionComplete({ plan, results, notes, editingSessionId, skipProgression }) {
     const now     = new Date();
     const dateStr = now.toISOString().split("T")[0];
     const inst    = rootSchema.programme_instances.find(i => i.id === plan.instanceId)
@@ -1623,22 +1894,28 @@ export default function App() {
     }));
 
     const ts = Date.now();
+    const sessionId = editingSessionId ?? `session_${dateStr}_${ts}`;
     const newE1rms = [];
     exercisesPerformed.forEach(ex =>
       ex.set_results.filter(s => !s.is_warmup && s.e1rm_kg).forEach(s =>
-        newE1rms.push({ exercise_id: ex.exercise_id, session_id: `session_${dateStr}_${ts}`, weight_kg: s.weight_kg, reps_completed: s.reps_completed, formula_used: "epley", e1rm_kg: s.e1rm_kg })
+        newE1rms.push({ exercise_id: ex.exercise_id, session_id: sessionId, weight_kg: s.weight_kg, reps_completed: s.reps_completed, formula_used: "epley", e1rm_kg: s.e1rm_kg })
       )
     );
 
     const session = {
-      id: `session_${dateStr}_${ts}`, programme_instance_id: inst?.id,
+      id: sessionId, programme_instance_id: inst?.id,
       date: dateStr, start_time: now.toTimeString().slice(0, 5),
       cycle_role: plan.role, cycle: inst?.current_cycle,
       week: plan.week, day: plan.day, notes, exercises_performed: exercisesPerformed
     };
 
+    // Replace existing session if editing, otherwise append
+    const prevSessions = rootSchema.workout_sessions.filter(s => s.id !== sessionId);
+    // Remove old e1rm entries for this session if editing
+    const prevE1rms = rootSchema.e1rm_log.filter(e => e.session_id !== sessionId);
+
     let newInsts = [...rootSchema.programme_instances];
-    if (inst) {
+    if (inst && !skipProgression) {
       const tmpl = rootSchema.programme_templates.find(t => t.id === inst.template_id);
       let { current_day, current_week, current_cycle } = inst;
       const maxDay  = tmpl?.days_per_week || 4;
@@ -1656,8 +1933,8 @@ export default function App() {
 
     updateSchema({
       ...rootSchema,
-      workout_sessions:    [...rootSchema.workout_sessions, session],
-      e1rm_log:            [...rootSchema.e1rm_log, ...newE1rms],
+      workout_sessions:    [...prevSessions, session],
+      e1rm_log:            [...prevE1rms, ...newE1rms],
       programme_instances: newInsts
     });
   }
@@ -1667,11 +1944,12 @@ export default function App() {
 
   const units = rootSchema.user_profile?.units || "kg";
   const tabs  = [
-    { id: "session",  label: "▶ Run"   },
-    { id: "plates",   label: "⊞ Plates" },
-    { id: "progress", label: "↗ Stats" },
-    { id: "root",     label: "⚙ Schema" },
-    { id: "exlib",    label: "Ex Lib"  },
+    { id: "session",  label: "▶ Run"     },
+    { id: "history",  label: "⏱ History" },
+    { id: "plates",   label: "⊞ Plates"  },
+    { id: "progress", label: "↗ Stats"   },
+    { id: "root",     label: "⚙ Schema"  },
+    { id: "exlib",    label: "Ex Lib"    },
   ];
 
   return (
@@ -1701,9 +1979,12 @@ export default function App() {
               onSessionComplete={handleSessionComplete}
               onSchemaChange={updateSchema}
               onContextChange={setSessionContext}
+              editingSession={editingSession}
+              onEditDone={() => { setEditingSession(null); setActiveTab("history"); }}
             />
           </div>
 
+          {activeTab === "history"  && <HistoryTab rootSchema={rootSchema} exLib={exLib} onEditSession={s => { setEditingSession(s); setActiveTab("session"); }} />}
           {activeTab === "plates"   && <PlateCalculator units={units} sessionContext={sessionContext} />}
           {activeTab === "progress" && <ProgressView rootSchema={rootSchema} units={units} />}
           {activeTab === "root"     && <RootSchemaView rootSchema={rootSchema} exLib={exLib} onChange={updateSchema} onRestore={handleRestore} />}
