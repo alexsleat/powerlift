@@ -150,8 +150,9 @@ router.post('/forgot-password', async (req, res) => {
     db.prepare('INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
       .run(user.id, hashToken(token), expiresAt);
 
-    const appUrl    = process.env.APP_URL || 'http://localhost:8080';
-    const resetLink = `${appUrl}/?reset=${token}`;
+    const appUrl = process.env.APP_URL;
+    if (!appUrl) console.warn('[WARN] APP_URL is not set — reset link will be broken');
+    const resetLink = `${appUrl || 'http://localhost:8080'}/?reset=${token}`;
 
     await sendMail({
       to:      user.email,
