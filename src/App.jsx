@@ -118,6 +118,26 @@ function calcPlates(total, bar, units) {
   return { plates: out, remainder: rem };
 }
 
+// ─── POWERLIFTING SCORES ──────────────────────────────────────────────────────
+
+// Wilks coefficients (male — could add female later)
+function wilksScore(totalKg, bwKg) {
+  if (!totalKg || !bwKg) return null;
+  const a = -216.0475144, b = 16.2606339, c = -0.002388645, d = -0.00113732, e = 7.01863e-6, f = -1.291e-8;
+  const denom = a + b*bwKg + c*bwKg**2 + d*bwKg**3 + e*bwKg**4 + f*bwKg**5;
+  if (!denom) return null;
+  return Math.round((500 / denom) * totalKg * 10) / 10;
+}
+
+// DOTS coefficients (male)
+function dotsScore(totalKg, bwKg) {
+  if (!totalKg || !bwKg) return null;
+  const a = -307.75076, b = 24.0900756, c = -0.1918759221, d = 0.0007391293, e = -0.000001093;
+  const denom = a + b*bwKg + c*bwKg**2 + d*bwKg**3 + e*bwKg**4;
+  if (!denom) return null;
+  return Math.round((500 / denom) * totalKg * 10) / 10;
+}
+
 function sessionTonnage(session) {
   let t = 0;
   session.exercises_performed?.forEach(ex =>
@@ -578,27 +598,73 @@ function RestTimer({ seconds, onDone }) {
 
 // ─── SVG CHARTS ───────────────────────────────────────────────────────────────
 
-function LineChart({ points, color }) {
-  if (!points || points.length < 2) return (
-    <div style={{ color: "var(--text-dim)", fontSize: "12px", padding: "16px 0", textAlign: "center" }}>Not enough data yet</div>
-  );
-  const W = 270, H = 90, PAD = { t: 10, b: 18, l: 36, r: 8 };
+// Full-width line chart with optional current-estimate dashed line and clickable dots
+function LineChartWithCurrent({ points, color, currentEstimate, onDotClick }) {
+  if (!points || points.length < 2) return null;
+  const W = 400, H = 110, PAD = { t: 12, b: 20, l: 40, r: 12 };
   const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
-  const ys = points.map(p => p.y);
-  const minY = Math.min(...ys), maxY = Math.max(...ys), rangeY = maxY - minY || 1;
-  const tx = i => PAD.l + (i / (points.length - 1)) * cW;
-  const ty = v => PAD.t + (1 - (v - minY) / rangeY) * cH;
+
+  // Include currentEstimate in the Y range so it never clips
+  const ys   = points.map(p => p.y);
+  const allY = currentEstimate != null ? [...ys, currentEstimate] : ys;
+  const minY = Math.min(...allY), maxY = Math.max(...allY);
+  const rangeY = maxY - minY || 1;
+  // 5% padding on the range so dots at extremes aren't clipped
+  const lo = minY - rangeY * 0.05, hi = maxY + rangeY * 0.05;
+  const span = hi - lo;
+
+  const tx = i  => PAD.l + (i / (points.length - 1)) * cW;
+  const ty = v  => PAD.t + (1 - (v - lo) / span) * cH;
   const d  = points.map((p, i) => `${i === 0 ? "M" : "L"} ${tx(i).toFixed(1)} ${ty(p.y).toFixed(1)}`).join(" ");
+
+  // Y-axis grid lines (3 levels)
+  const gridVals = [lo + span * 0.25, lo + span * 0.5, lo + span * 0.75].map(v => Math.round(v));
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "90px" }}>
-      <line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b} stroke="#333" strokeWidth="1" />
-      <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b} stroke="#333" strokeWidth="1" />
-      <text x={PAD.l - 3} y={PAD.t + 4}     fill="#666" fontSize="8" textAnchor="end">{maxY.toFixed(1)}</text>
-      <text x={PAD.l - 3} y={H - PAD.b + 1} fill="#666" fontSize="8" textAnchor="end">{minY.toFixed(1)}</text>
-      <path d={d} fill="none" stroke={color || "var(--accent)"} strokeWidth="1.5" />
-      {points.map((p, i) => <circle key={i} cx={tx(i)} cy={ty(p.y)} r={i === points.length - 1 ? 3 : 1.5} fill={color || "var(--accent)"} />)}
-      <text x={tx(0)} y={H} fill="#555" fontSize="8" textAnchor="middle">{points[0].x}</text>
-      {points.length > 2 && <text x={tx(points.length - 1)} y={H} fill="#555" fontSize="8" textAnchor="middle">{points[points.length - 1].x}</text>}
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      {/* Grid lines */}
+      {gridVals.map((v, i) => (
+        <g key={i}>
+          <line x1={PAD.l} y1={ty(v)} x2={W - PAD.r} y2={ty(v)} stroke="var(--border)" strokeWidth="0.5" strokeDasharray="2,3" />
+          <text x={PAD.l - 4} y={ty(v) + 3} fill="var(--text-dim)" fontSize="7" textAnchor="end">{v}</text>
+        </g>
+      ))}
+
+      {/* Axes */}
+      <line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b} stroke="var(--border)" strokeWidth="1" />
+      <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b} stroke="var(--border)" strokeWidth="1" />
+
+      {/* Current estimate dashed line */}
+      {currentEstimate != null && (
+        <>
+          <line
+            x1={PAD.l} y1={ty(currentEstimate)}
+            x2={W - PAD.r} y2={ty(currentEstimate)}
+            stroke="var(--warning)" strokeWidth="1.2" strokeDasharray="4,3" opacity="0.7"
+          />
+          <text x={W - PAD.r + 2} y={ty(currentEstimate) + 3} fill="var(--warning)" fontSize="7" textAnchor="start">now</text>
+        </>
+      )}
+
+      {/* Historical line */}
+      <path d={d} fill="none" stroke={color || "var(--accent)"} strokeWidth="2" strokeLinejoin="round" />
+
+      {/* Dots — clickable */}
+      {points.map((p, i) => (
+        <circle
+          key={i}
+          cx={tx(i)} cy={ty(p.y)}
+          r={i === points.length - 1 ? 4 : 3}
+          fill={color || "var(--accent)"}
+          stroke="var(--surface)" strokeWidth="1.5"
+          style={{ cursor: p.sessionId ? "pointer" : "default" }}
+          onClick={() => p.sessionId && onDotClick?.(p.sessionId)}
+        />
+      ))}
+
+      {/* X-axis labels: first and last only */}
+      <text x={tx(0)} y={H - 2} fill="var(--text-dim)" fontSize="7" textAnchor="middle">{points[0].x}</text>
+      <text x={tx(points.length - 1)} y={H - 2} fill="var(--text-dim)" fontSize="7" textAnchor="middle">{points[points.length - 1].x}</text>
     </svg>
   );
 }
@@ -731,97 +797,267 @@ function PlateCalculator({ units, sessionContext }) {
 
 // ─── PROGRESS VIEW ────────────────────────────────────────────────────────────
 
-function ProgressView({ rootSchema, units }) {
-  const [sub, setSub] = useState("e1rm");
-  const mainLifts     = ["ex_squat", "ex_deadlift", "ex_bench", "ex_ohp"];
+// Compute recency-weighted current e1RM estimate from last ~6 weeks of entries.
+// More recent entries get exponentially higher weight.
+function estimateCurrentE1rm(entries) {
+  if (!entries.length) return null;
+  const sorted = [...entries].sort((a, b) => (a.session_id > b.session_id ? 1 : -1));
+  // Take last 12 entries max
+  const recent = sorted.slice(-12);
+  if (!recent.length) return null;
+  let sumW = 0, sumWV = 0;
+  recent.forEach((e, i) => {
+    const w = Math.exp(i / 4); // exponential decay: latest has weight e^(n/4)
+    sumW  += w;
+    sumWV += w * e.e1rm_kg;
+  });
+  return sumWV / sumW;
+}
 
-  const e1rmCharts = mainLifts.map(id => {
+// Best set at exactly 10 reps for a given exercise across all sessions
+function getBest10rm(exerciseId, sessions) {
+  let best = null;
+  (sessions || []).forEach(session => {
+    (session.exercises_performed || []).forEach(ex => {
+      if (ex.exercise_id !== exerciseId) return;
+      (ex.set_results || []).forEach(s => {
+        if (!s.is_warmup && s.success && s.reps_completed >= 10 && s.weight_kg > 0) {
+          const e1rm = epley(s.weight_kg, s.reps_completed);
+          if (!best || e1rm > best.e1rm) {
+            best = { weight_kg: s.weight_kg, reps: s.reps_completed, e1rm, date: session.date, sessionId: session.id };
+          }
+        }
+      });
+    });
+  });
+  return best;
+}
+
+function ProgressView({ rootSchema, units, onNavigateToSession }) {
+  const [sub, setSub] = useState("lifts");
+  const mainLifts = ["ex_squat", "ex_deadlift", "ex_bench", "ex_ohp"];
+  const pfLifts   = ["ex_squat", "ex_bench", "ex_deadlift"]; // for total/Wilks/DOTS
+  const sessions  = rootSchema.workout_sessions || [];
+  const bwKg      = rootSchema.user_profile?.bodyweight_kg || null;
+
+  // Per-lift data
+  const liftData = mainLifts.map(id => {
     const entries = (rootSchema.e1rm_log || [])
       .filter(e => e.exercise_id === id)
-      .sort((a, b) => a.session_id > b.session_id ? 1 : -1);
+      .sort((a, b) => (a.session_id > b.session_id ? 1 : -1));
+
     const points = entries.map(e => ({
-      x: (e.session_id || "").replace("session_", "").substring(0, 10),
-      y: dspW(e.e1rm_kg, units)
+      x:         (e.session_id || "").replace("session_", "").substring(0, 10),
+      y:         dspW(e.e1rm_kg, units),
+      sessionId: e.session_id,
     }));
-    const best = entries.length ? Math.max(...entries.map(e => dspW(e.e1rm_kg, units))) : null;
-    return { id, ...LIFT_META[id], points, best };
+
+    const allKg     = entries.map(e => e.e1rm_kg);
+    const bestKg    = allKg.length ? Math.max(...allKg) : null;
+    const bestEntry = bestKg != null ? entries.find(e => e.e1rm_kg === bestKg) : null;
+    const bestDate  = bestEntry ? (bestEntry.session_id || "").replace("session_", "").substring(0, 10) : null;
+
+    const currentKg  = estimateCurrentE1rm(entries);
+    const best10rm   = getBest10rm(id, sessions);
+
+    return { id, ...LIFT_META[id], points, bestKg, bestDate, bestEntry, currentKg, best10rm };
   });
 
-  const recentSessions = (rootSchema.workout_sessions || []).slice(-12);
+  // Powerlifting total: use current estimated 1RM for each of S/B/D
+  const pfData    = liftData.filter(l => pfLifts.includes(l.id));
+  const allHaveCurrent = pfData.every(l => l.currentKg != null);
+  const currentTotal   = allHaveCurrent ? pfData.reduce((s, l) => s + l.currentKg, 0) : null;
+  const bestTotal      = pfData.every(l => l.bestKg != null) ? pfData.reduce((s, l) => s + l.bestKg, 0) : null;
+
+  const currentWilks = bwKg && currentTotal ? wilksScore(currentTotal, bwKg) : null;
+  const currentDots  = bwKg && currentTotal ? dotsScore(currentTotal, bwKg)  : null;
+  const bestWilks    = bwKg && bestTotal    ? wilksScore(bestTotal, bwKg)    : null;
+  const bestDots     = bwKg && bestTotal    ? dotsScore(bestTotal, bwKg)     : null;
+
+  // Volume tab
+  const recentSessions = sessions.slice(-16);
   const tonnageBars    = recentSessions.map(s => ({
     label: (s.date || "").substring(5),
-    value: dspW(sessionTonnage(s), units)
-  }));
-  const sessionRows = recentSessions.slice(-8).reverse().map(s => ({
-    date:    s.date,
-    day:     `W${s.week}D${s.day}`,
-    tonnage: dspW(sessionTonnage(s), units).toFixed(0)
+    value: dspW(sessionTonnage(s), units),
   }));
 
   return (
     <div>
-      <div style={S.h1}>Progress</div>
+      <div style={S.h1}>Stats</div>
       <div style={S.subNav}>
-        <button style={S.btn(sub === "e1rm"   ? "active" : "default")} onClick={() => setSub("e1rm")}>1RM</button>
+        <button style={S.btn(sub === "lifts"  ? "active" : "default")} onClick={() => setSub("lifts")}>Lifts</button>
+        <button style={S.btn(sub === "totals" ? "active" : "default")} onClick={() => setSub("totals")}>Totals</button>
         <button style={S.btn(sub === "volume" ? "active" : "default")} onClick={() => setSub("volume")}>Volume</button>
       </div>
 
-      {sub === "e1rm" && (
+      {/* ── Lifts tab ── */}
+      {sub === "lifts" && (
         <>
-          <div style={S.grid2}>
-            {e1rmCharts.map(lift => (
-              <div key={lift.id} style={S.card}>
-                <div style={S.cardHead}>
-                  <span style={{ fontWeight: "bold", color: lift.color, fontSize: "12px" }}>{lift.name}</span>
-                  {lift.best != null && <span style={{ ...S.mono, fontSize: "12px" }}>Best {lift.best}{units}</span>}
-                </div>
-                <div style={{ padding: "8px" }}>
-                  <LineChart points={lift.points} color={lift.color} />
+          {liftData.map(lift => (
+            <div key={lift.id} style={S.card}>
+              {/* Card header */}
+              <div style={{ ...S.cardHead, flexWrap: "wrap", gap: "6px" }}>
+                <span style={{ fontWeight: "700", color: lift.color, fontSize: "14px" }}>{lift.name}</span>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginLeft: "auto" }}>
+                  {lift.currentKg != null && (
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                      Est. now <span style={{ color: lift.color, fontWeight: "700" }}>{fmtW(Math.round(lift.currentKg * 2) / 2, units)}</span>
+                    </span>
+                  )}
+                  {lift.bestKg != null && (
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                      Best 1RM <span style={{ color: "var(--text)", fontWeight: "700" }}>{fmtW(lift.bestKg, units)}</span>
+                      {lift.bestDate && <span style={{ color: "var(--text-dim)", marginLeft: "4px" }}>{lift.bestDate}</span>}
+                    </span>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-          {e1rmCharts.every(c => c.points.length < 2) && (
+
+              {/* Chart */}
+              <div style={{ padding: "8px 8px 4px" }}>
+                {lift.points.length >= 2 ? (
+                  <LineChartWithCurrent
+                    points={lift.points}
+                    color={lift.color}
+                    currentEstimate={lift.currentKg != null ? dspW(lift.currentKg, units) : null}
+                    onDotClick={sid => onNavigateToSession?.(sid)}
+                  />
+                ) : (
+                  <div style={{ color: "var(--text-dim)", fontSize: "12px", padding: "16px 0", textAlign: "center" }}>
+                    Log at least 2 sessions to see chart
+                  </div>
+                )}
+              </div>
+
+              {/* Best records row */}
+              <div style={{ padding: "0 12px 14px", display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                {/* Best 1RM */}
+                {lift.bestEntry && (
+                  <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "8px 12px", flex: "1 1 130px" }}>
+                    <div style={S.label}>Best 1RM</div>
+                    <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "15px" }}>{fmtW(lift.bestKg, units)}</div>
+                    <button
+                      style={{ background: "transparent", border: "none", color: "var(--accent)", fontSize: "11px", cursor: "pointer", padding: "2px 0", fontFamily: FONT }}
+                      onClick={() => onNavigateToSession?.(lift.bestEntry.session_id)}>
+                      {lift.bestDate} →
+                    </button>
+                  </div>
+                )}
+                {/* Best 10RM */}
+                {lift.best10rm && (
+                  <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "8px 12px", flex: "1 1 130px" }}>
+                    <div style={S.label}>Best 10RM set</div>
+                    <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "15px" }}>
+                      {fmtW(lift.best10rm.weight_kg, units)} × {lift.best10rm.reps}
+                    </div>
+                    <div style={{ color: "var(--text-dim)", fontSize: "11px" }}>
+                      e1RM ≈ {fmtW(Math.round(lift.best10rm.e1rm), units)}
+                    </div>
+                    <button
+                      style={{ background: "transparent", border: "none", color: "var(--accent)", fontSize: "11px", cursor: "pointer", padding: "2px 0", fontFamily: FONT }}
+                      onClick={() => onNavigateToSession?.(lift.best10rm.sessionId)}>
+                      {lift.best10rm.date} →
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {liftData.every(l => l.points.length === 0) && (
             <div style={{ color: "var(--text-dim)", fontSize: "13px", textAlign: "center", padding: "32px 0" }}>
-              Complete sessions to see progress charts.
+              Complete sessions to see progress.
             </div>
           )}
         </>
       )}
 
-      {sub === "volume" && (
+      {/* ── Totals tab ── */}
+      {sub === "totals" && (
         <>
-          <div style={S.card}>
-            <div style={S.cardHead}><span style={S.h3}>Tonnage per session ({units})</span></div>
-            <div style={{ padding: "8px" }}>
-              {tonnageBars.length > 0
-                ? <BarChart bars={tonnageBars} color="var(--accent-dim)" />
-                : <div style={{ color: "var(--text-dim)", fontSize: "13px", padding: "16px", textAlign: "center" }}>No sessions logged yet.</div>
-              }
-            </div>
-          </div>
-          {sessionRows.length > 0 && (
-            <div style={S.card}>
-              <div style={S.cardHead}><span style={S.h3}>Recent sessions</span></div>
-              <div style={S.cardBody}>
-                <table style={S.table}>
-                  <thead><tr>
-                    <th style={S.th}>Date</th><th style={S.th}>Day</th><th style={S.th}>Tonnage ({units})</th>
-                  </tr></thead>
-                  <tbody>
-                    {sessionRows.map((r, i) => (
-                      <tr key={i}>
-                        <td style={{ ...S.td, ...S.mono }}>{r.date}</td>
-                        <td style={S.td}>{r.day}</td>
-                        <td style={{ ...S.td, ...S.mono }}>{r.tonnage}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* Bodyweight prompt if missing */}
+          {!bwKg && (
+            <div style={{ color: "var(--warning)", fontSize: "12px", background: "var(--warning-dim)", border: "1px solid var(--border)", borderRadius: "6px", padding: "10px 14px", marginBottom: "12px" }}>
+              Set your bodyweight in Settings → Setup → Profile to enable Wilks and DOTS scores.
             </div>
           )}
+
+          {/* Scorecard */}
+          <div style={S.card}>
+            <div style={S.cardHead}><span style={S.h3}>Powerlifting Total (S + B + D)</span></div>
+            <div style={S.cardBody}>
+              {/* Per-lift row */}
+              {pfData.map(l => (
+                <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ color: l.color, fontWeight: "700", fontSize: "13px", width: "80px" }}>{l.name}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    Best <span style={{ color: "var(--text)" }}>{l.bestKg != null ? fmtW(l.bestKg, units) : "—"}</span>
+                  </span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    Est. <span style={{ color: l.color }}>{l.currentKg != null ? fmtW(Math.round(l.currentKg * 2) / 2, units) : "—"}</span>
+                  </span>
+                </div>
+              ))}
+
+              {/* Totals */}
+              <div style={{ marginTop: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <span style={{ ...S.h3 }}>Total</span>
+                  <div style={{ display: "flex", gap: "20px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                      Best <span style={{ color: "var(--text)", fontWeight: "700" }}>{bestTotal != null ? fmtW(Math.round(bestTotal), units) : "—"}</span>
+                    </span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                      Est. <span style={{ color: "var(--accent)", fontWeight: "700" }}>{currentTotal != null ? fmtW(Math.round(currentTotal), units) : "—"}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Wilks */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <span style={{ ...S.h3 }}>Wilks</span>
+                  <div style={{ display: "flex", gap: "20px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                      Best <span style={{ color: "var(--text)", fontWeight: "700" }}>{bestWilks ?? "—"}</span>
+                    </span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                      Est. <span style={{ color: "var(--accent)", fontWeight: "700" }}>{currentWilks ?? "—"}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* DOTS */}
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ ...S.h3 }}>DOTS</span>
+                  <div style={{ display: "flex", gap: "20px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                      Best <span style={{ color: "var(--text)", fontWeight: "700" }}>{bestDots ?? "—"}</span>
+                    </span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                      Est. <span style={{ color: "var(--accent)", fontWeight: "700" }}>{currentDots ?? "—"}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {!bwKg && (
+                  <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "8px" }}>Wilks / DOTS require bodyweight</div>
+                )}
+              </div>
+            </div>
+          </div>
         </>
+      )}
+
+      {/* ── Volume tab ── */}
+      {sub === "volume" && (
+        <div style={S.card}>
+          <div style={S.cardHead}><span style={S.h3}>Session tonnage ({units})</span></div>
+          <div style={{ padding: "8px" }}>
+            {tonnageBars.length > 0
+              ? <BarChart bars={tonnageBars} color="#1a3a4a" />
+              : <div style={{ color: "var(--text-dim)", fontSize: "13px", padding: "16px", textAlign: "center" }}>No sessions yet.</div>
+            }
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1329,6 +1565,18 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
               <input style={S.input} value={rootSchema.user_profile.name}
                 onChange={e => updateProfile("name", e.target.value)} />
             </div>
+            <div style={{ marginBottom: "4px" }}>
+              <label style={S.label}>Bodyweight ({units}) — used for Wilks / DOTS</label>
+              <input style={{ ...S.input, width: "140px" }} type="number" step={units === "lb" ? "1" : "0.5"} min="30"
+                value={rootSchema.user_profile.bodyweight_kg
+                  ? dspW(rootSchema.user_profile.bodyweight_kg, units)
+                  : ""}
+                placeholder="optional"
+                onChange={e => {
+                  const v = parseFloat(e.target.value);
+                  updateProfile("bodyweight_kg", v > 0 ? toKg(v, units) : null);
+                }} />
+            </div>
           </SchemaSection>
 
           <SchemaSection title="Rest Timer Defaults" defaultOpen={false}>
@@ -1447,9 +1695,14 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const [sessionNotes,    setSessionNotes]    = useState("");
   const [dayOverride,     setDayOverride]     = useState(null);
   const [weekWarnShown,   setWeekWarnShown]   = useState(false);
-  const [logModal,        setLogModal]        = useState(null);
-  const [weightModal,     setWeightModal]     = useState(null);
-  const [lastRpeByExId,   setLastRpeByExId]   = useState({});
+  const [logModal,          setLogModal]          = useState(null);
+  const [weightModal,       setWeightModal]       = useState(null);
+  const [lastRpeByExId,     setLastRpeByExId]     = useState({});
+  const [restKey,           setRestKey]           = useState(0);   // increments on every new rest → remounts timer
+  const [sessionDate,       setSessionDate]       = useState("");
+  const [sessionTime,       setSessionTime]       = useState("");
+  const [sessionDurationMins, setSessionDurationMins] = useState(null);
+  const sessionStartTsRef = useRef(null);
 
   useEffect(() => {
     if (!editingSession) return;
@@ -1459,21 +1712,37 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const fakeInst = inst ? { ...inst, current_week: editingSession.week || inst.current_week, current_day: editingSession.day || inst.current_day } : null;
     const plan = fakeInst && tmpl ? buildSessionPlan(fakeInst, tmpl, rootSchema) : null;
     if (!plan) return;
-    const preResults = {};
+
+    // Restore results AND weight overrides from the saved session
+    const preResults  = {};
+    const preOverrides = {};
     editingSession.exercises_performed?.forEach((ex, exIdx) => {
       ex.set_results?.forEach((s, si) => {
-        if (s.success || s.reps_completed > 0)
-          preResults[`${exIdx}-${si}`] = { reps: s.reps_completed, rpe: s.rpe, done: s.success };
+        // Restore weight for every set (so logged weights show, not template weights)
+        if (s.weight_kg != null) preOverrides[`${exIdx}-${si}`] = s.weight_kg;
+        if (s.success)
+          preResults[`${exIdx}-${si}`] = { reps: s.reps_completed, rpe: s.rpe, done: true };
       });
     });
+
+    // Find first exercise that isn't fully done
+    const firstIncomplete = plan.exercises.findIndex((ex, exIdx) => {
+      const wc = ex.sets.filter(s => s.isWarmup).length;
+      return ex.sets.filter(s => !s.isWarmup).some((_, j) => !preResults[`${exIdx}-${wc + j}`]?.done);
+    });
+
     setSelectedInstId(inst?.id || null);
     setSessionPlan({ ...plan, editingSessionId: editingSession.id });
     setSetResults(preResults);
-    setWeightOverrides({});
-    setCurrentExIdx(0);
-    setExpandedSet(new Set([0]));
+    setWeightOverrides(preOverrides);
+    setCurrentExIdx(firstIncomplete >= 0 ? firstIncomplete : 0);
+    setExpandedSet(new Set([firstIncomplete >= 0 ? firstIncomplete : 0]));
     setSessionNotes(editingSession.notes || "");
+    setSessionDate(editingSession.date || new Date().toISOString().split("T")[0]);
+    setSessionTime(editingSession.start_time || new Date().toTimeString().slice(0, 5));
+    setSessionDurationMins(editingSession.duration_minutes || null);
     setResting(false);
+    sessionStartTsRef.current = Date.now();
     setPhase("session");
   }, [editingSession]);
 
@@ -1514,10 +1783,13 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const wasAlreadyDone = !!setResults[`${exIdx}-${setIdx}`]?.done;
     if (weightKg !== undefined) {
       const updates = {};
-      ex.sets.forEach((s, i) => {
-        if (i >= setIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done)
-          updates[`${exIdx}-${i}`] = weightKg;
-      });
+      const currentSetIsWarmup = ex.sets[setIdx].isWarmup;
+      if (!currentSetIsWarmup) {
+        ex.sets.forEach((s, i) => {
+          if (i >= setIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done)
+            updates[`${exIdx}-${i}`] = weightKg;
+        });
+      }
       updates[`${exIdx}-${setIdx}`] = weightKg;
       setWeightOverrides(prev => ({ ...prev, ...updates }));
     }
@@ -1525,9 +1797,13 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setSetResults(r => ({ ...r, [`${exIdx}-${setIdx}`]: { reps, rpe, done: true } }));
     setLogModal(null);
     if (wasAlreadyDone) return;
-    const nextSet = setIdx + 1;
-    if (nextSet < ex.sets.length) {
-      if (!ex.sets[nextSet].isWarmup) { setRestSeconds(restDefs[ex.role] ?? DEFAULT_REST[ex.role] ?? 120); setResting(true); }
+    const nextSetIdx = setIdx + 1;
+    if (nextSetIdx < ex.sets.length) {
+      if (!ex.sets[nextSetIdx].isWarmup) {
+        setRestSeconds(restDefs[ex.role] ?? DEFAULT_REST[ex.role] ?? 120);
+        setResting(true);
+        setRestKey(k => k + 1);
+      }
     } else {
       const nextEx = exIdx + 1;
       if (nextEx < sessionPlan.exercises.length) {
@@ -1536,7 +1812,12 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         const nextRole = sessionPlan.exercises[nextEx].role || "assistance";
         setRestSeconds(restDefs[nextRole] ?? DEFAULT_REST[nextRole] ?? 90);
         setResting(true);
+        setRestKey(k => k + 1);
       } else {
+        // Auto-compute duration from session start
+        if (sessionStartTsRef.current) {
+          setSessionDurationMins(Math.round((Date.now() - sessionStartTsRef.current) / 60000));
+        }
         setPhase("summary");
       }
     }
@@ -1546,15 +1827,41 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setExpandedSet(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; });
   }
 
+  function getAssistanceWeightOverrides(plan) {
+    const overrides = {};
+    const sessions = rootSchema.workout_sessions || [];
+    plan.exercises.forEach((ex, exIdx) => {
+      if (ex.role !== "assistance") return;
+      if (ex.sets.some(s => s.weight > 0)) return; // already has a weight
+      for (let si = sessions.length - 1; si >= 0; si--) {
+        const ep = sessions[si].exercises_performed?.find(e => e.exercise_id === ex.exercise_id);
+        if (!ep) continue;
+        const lastWork = (ep.set_results || []).filter(s => !s.is_warmup && s.weight_kg > 0).slice(-1)[0];
+        if (lastWork) {
+          ex.sets.forEach((_, setIdx) => { overrides[`${exIdx}-${setIdx}`] = lastWork.weight_kg; });
+          break;
+        }
+      }
+    });
+    return overrides;
+  }
+
   function startSession() {
     const inst = rootSchema.programme_instances.find(i => i.id === selectedInstId);
     const tmpl = rootSchema.programme_templates.find(t => t.id === inst?.template_id);
     if (!inst || !tmpl) return;
     const plan = buildSessionPlan(inst, tmpl, rootSchema);
     if (!plan) return;
+    const now = new Date();
     setSessionPlan(plan);
     setCurrentExIdx(0); setExpandedSet(new Set([0])); setSetResults({});
-    setWeightOverrides({}); setResting(false); setPhase("session");
+    setWeightOverrides(getAssistanceWeightOverrides(plan)); setResting(false);
+    setSessionNotes("");
+    setSessionDate(now.toISOString().split("T")[0]);
+    setSessionTime(now.toTimeString().slice(0, 5));
+    setSessionDurationMins(null);
+    sessionStartTsRef.current = Date.now();
+    setPhase("session");
   }
 
   // ── Render: SetRow ──────────────────────────────────────────────────────────
@@ -1598,12 +1905,16 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
 
           {/* RPE */}
-          {!set.isWarmup && !isAssistance ? (
-            <div style={{ minWidth: "40px", color: done ? "var(--accent)" : "var(--text-dim)", fontSize: "12px", textAlign: "right" }}>
-              {done && result.rpe ? `@${result.rpe}` : "RPE?"}
-            </div>
-          ) : (
-            <div style={{ minWidth: "40px" }} />
+          {!set.isWarmup && !isAssistance ? (() => {
+            // Expected RPE: from set definition, or infer from role (AMRAP = high effort)
+            const targetRpe = set.target_rpe ?? (set.isAmrap ? "8+" : exEntry.role === "main" ? "8" : "7");
+            return (
+              <div style={{ minWidth: "44px", color: done ? "var(--accent)" : "var(--text-dim)", fontSize: "12px", textAlign: "right" }}>
+                {done && result.rpe != null ? `@${result.rpe}` : `@${targetRpe}`}
+              </div>
+            );
+          })() : (
+            <div style={{ minWidth: "44px" }} />
           )}
 
           {/* Log / Done */}
@@ -1663,9 +1974,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         </div>
         <div style={{ display: isExpanded ? "block" : "none" }}>
           <div style={{ padding: "10px" }}>
-            {ex.sets.map((set, setIdx) => (
-              <SetRow key={setIdx} exIdx={exIdx} setIdx={setIdx} set={set} />
-            ))}
+            {ex.sets.map((set, setIdx) => SetRow({ exIdx, setIdx, set }))}
           </div>
         </div>
       </div>
@@ -1696,9 +2005,16 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         const fakeInst = { ...inst, current_week: dayOverride.week, current_day: dayOverride.day };
         const plan = buildSessionPlan(fakeInst, tmpl, rootSchema);
         if (!plan) return;
+        const nowOvr = new Date();
         setSessionPlan({ ...plan, overriddenFromWeek: inst.current_week, overriddenFromDay: inst.current_day });
         setCurrentExIdx(0); setExpandedSet(new Set([0])); setSetResults({});
-        setWeightOverrides({}); setResting(false); setPhase("session");
+        setWeightOverrides(getAssistanceWeightOverrides(plan)); setResting(false);
+        setSessionNotes("");
+        setSessionDate(nowOvr.toISOString().split("T")[0]);
+        setSessionTime(nowOvr.toTimeString().slice(0, 5));
+        setSessionDurationMins(null);
+        sessionStartTsRef.current = Date.now();
+        setPhase("session");
       } else {
         startSession();
       }
@@ -1863,11 +2179,9 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
         </div>
 
-        {resting && <RestTimer key={`rest-${currentExIdx}`} seconds={restSeconds} onDone={() => setResting(false)} />}
+        {resting && <RestTimer key={restKey} seconds={restSeconds} onDone={() => setResting(false)} />}
 
-        {sessionPlan.exercises.map((ex, exIdx) => (
-          <ExCard key={exIdx} ex={ex} exIdx={exIdx} />
-        ))}
+        {sessionPlan.exercises.map((ex, exIdx) => ExCard({ ex, exIdx }))}
       </div>
     );
   }
@@ -1888,8 +2202,30 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         )}
         <div style={S.card}>
           <div style={S.cardBody}>
-            <label style={S.label}>Notes</label>
-            <textarea style={S.textarea} value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} placeholder="Session notes..." />
+            <div style={S.grid2}>
+              <div>
+                <label style={S.label}>Date</label>
+                <input style={S.input} type="date" value={sessionDate}
+                  onChange={e => setSessionDate(e.target.value)} />
+              </div>
+              <div>
+                <label style={S.label}>Start time</label>
+                <input style={S.input} type="time" value={sessionTime}
+                  onChange={e => setSessionTime(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ marginTop: "14px" }}>
+              <label style={S.label}>Duration (minutes)</label>
+              <input style={{ ...S.input, width: "130px" }} type="number" min="1" step="1"
+                value={sessionDurationMins ?? ""}
+                placeholder="optional"
+                onChange={e => setSessionDurationMins(e.target.value ? parseInt(e.target.value) : null)} />
+            </div>
+            <div style={{ marginTop: "14px" }}>
+              <label style={S.label}>Notes</label>
+              <textarea style={S.textarea} value={sessionNotes}
+                onChange={e => setSessionNotes(e.target.value)} placeholder="Session notes..." />
+            </div>
           </div>
         </div>
         <button style={{ ...S.btn("primary"), width: "100%", padding: "16px", fontSize: "16px" }}
@@ -1902,6 +2238,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             };
             onSessionComplete({
               plan: planWithWeights, results: setResults, notes: sessionNotes,
+              sessionDate, sessionTime, sessionDurationMins,
               editingSessionId: sessionPlan.editingSessionId ?? null,
               skipProgression: isOverrideSession || isEdit,
             });
@@ -1921,9 +2258,19 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
 // ─── HISTORY TAB ─────────────────────────────────────────────────────────────
 
-function HistoryTab({ rootSchema, exLib, onEditSession }) {
+function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlightSession, onHighlightClear }) {
   const units = rootSchema.user_profile?.units || "kg";
-  const [expanded, setExpanded] = useState(null);
+  const [expanded,   setExpanded]   = useState(highlightSession ?? null);
+  const [confirmDel, setConfirmDel] = useState(null);
+  const highlightRef = useRef(null);
+
+  // Scroll to highlighted session on mount / change
+  useEffect(() => {
+    if (highlightSession && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    return () => onHighlightClear?.();
+  }, [highlightSession]);
 
   const sessions = [...(rootSchema.workout_sessions || [])]
     .sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
@@ -1964,7 +2311,9 @@ function HistoryTab({ rootSchema, exLib, onEditSession }) {
         const totals = sessionSummary(session);
         const name   = instName(session);
         return (
-          <div key={session.id} style={{ ...S.card, marginBottom: "8px" }}>
+          <div key={session.id}
+            ref={session.id === highlightSession ? highlightRef : null}
+            style={{ ...S.card, marginBottom: "8px", borderColor: session.id === highlightSession ? "var(--accent)" : "var(--border)" }}>
             <div style={{ ...S.cardHead, cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : session.id)}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "13px" }}>
@@ -1974,10 +2323,19 @@ function HistoryTab({ rootSchema, exLib, onEditSession }) {
                 <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "3px" }}>
                   {session.week ? `Wk ${session.week} · Day ${session.day}` : ""}
                   {totals.sets > 0 ? `  ·  ${totals.sets} sets · ${Math.round(totals.kg)}${units}` : ""}
+                  {session.duration_minutes ? `  ·  ${session.duration_minutes}min` : ""}
                 </div>
               </div>
               <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
                 <button style={S.btnSm("warning")} onPointerDown={e => { e.stopPropagation(); onEditSession(session); }}>Edit</button>
+                {confirmDel === session.id ? (
+                  <>
+                    <button style={S.btnSm("danger")} onPointerDown={e => { e.stopPropagation(); onDeleteSession(session.id); setConfirmDel(null); }}>Confirm</button>
+                    <button style={S.btnSm("ghost")}  onPointerDown={e => { e.stopPropagation(); setConfirmDel(null); }}>✕</button>
+                  </>
+                ) : (
+                  <button style={S.btnSm("danger")} onPointerDown={e => { e.stopPropagation(); setConfirmDel(session.id); setExpanded(null); }}>Del</button>
+                )}
                 <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>{isOpen ? "▲" : "▼"}</span>
               </div>
             </div>
@@ -2022,8 +2380,9 @@ export default function App() {
   const [exLib,          setExLib]          = useState(null);
   const [activeTab,      setActiveTab]      = useState("session");
   const [loading,        setLoading]        = useState(true);
-  const [sessionContext, setSessionContext] = useState(null);
-  const [editingSession, setEditingSession] = useState(null);
+  const [sessionContext,    setSessionContext]    = useState(null);
+  const [editingSession,    setEditingSession]    = useState(null);
+  const [highlightSession,  setHighlightSession]  = useState(null); // id to scroll/highlight in history
   const [user,           setUser]           = useState(null);
   const [authChecked,    setAuthChecked]    = useState(false);
 
@@ -2093,14 +2452,26 @@ export default function App() {
     updateSchema(schema);
     updateExLib(lib);
   }
+  function handleDeleteSession(sessionId) {
+    updateSchema({
+      ...rootSchema,
+      workout_sessions: rootSchema.workout_sessions.filter(s => s.id !== sessionId),
+      e1rm_log:         rootSchema.e1rm_log.filter(e => e.session_id !== sessionId),
+    });
+  }
+
+  function handleNavigateToSession(sessionId) {
+    setHighlightSession(sessionId);
+    setActiveTab("history");
+  }
+
   function toggleUnits() {
     const newUnits = (rootSchema.user_profile?.units || "kg") === "kg" ? "lb" : "kg";
     updateSchema({ ...rootSchema, user_profile: { ...rootSchema.user_profile, units: newUnits } });
   }
 
-  function handleSessionComplete({ plan, results, notes, editingSessionId, skipProgression }) {
-    const now     = new Date();
-    const dateStr = now.toISOString().split("T")[0];
+  function handleSessionComplete({ plan, results, notes, sessionDate, sessionTime, sessionDurationMins, editingSessionId, skipProgression }) {
+    const dateStr = sessionDate || new Date().toISOString().split("T")[0];
     const inst    = rootSchema.programme_instances.find(i => i.id === plan.instanceId)
                  || rootSchema.programme_instances.find(i => i.status === "active");
 
@@ -2129,7 +2500,9 @@ export default function App() {
 
     const session = {
       id: sessionId, programme_instance_id: inst?.id,
-      date: dateStr, start_time: now.toTimeString().slice(0, 5),
+      date: dateStr,
+      start_time: sessionTime || new Date().toTimeString().slice(0, 5),
+      duration_minutes: sessionDurationMins ?? null,
       cycle_role: plan.role, cycle: inst?.current_cycle,
       week: plan.week, day: plan.day, notes, exercises_performed: exercisesPerformed
     };
@@ -2219,8 +2592,8 @@ export default function App() {
             />
           </div>
 
-          {activeTab === "history"  && <HistoryTab rootSchema={rootSchema} exLib={exLib} onEditSession={s => { setEditingSession(s); setActiveTab("session"); }} />}
-          {activeTab === "progress" && <ProgressView rootSchema={rootSchema} units={units} />}
+          {activeTab === "history"  && <HistoryTab rootSchema={rootSchema} exLib={exLib} onEditSession={s => { setEditingSession(s); setActiveTab("session"); }} onDeleteSession={handleDeleteSession} highlightSession={highlightSession} onHighlightClear={() => setHighlightSession(null)} />}
+          {activeTab === "progress" && <ProgressView rootSchema={rootSchema} units={units} onNavigateToSession={handleNavigateToSession} />}
           {activeTab === "plates"   && <PlateCalculator units={units} sessionContext={sessionContext} />}
           {activeTab === "settings" && (
             <SettingsTab
