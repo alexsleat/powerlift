@@ -1,9 +1,10 @@
-const express = require('express');
-const bcrypt  = require('bcrypt');
-const jwt     = require('jsonwebtoken');
-const crypto  = require('crypto');
-const db      = require('../db');
+const express    = require('express');
+const bcrypt     = require('bcrypt');
+const jwt        = require('jsonwebtoken');
+const crypto     = require('crypto');
+const db         = require('../db');
 const { JWT_SECRET } = require('../middleware/auth');
+const { sendMail }   = require('../mailer');
 
 const router = express.Router();
 
@@ -124,6 +125,71 @@ router.post('/logout', (req, res) => {
   if (token) db.prepare('DELETE FROM refresh_tokens WHERE token_hash = ?').run(hashToken(token));
   res.clearCookie(COOKIE_NAME, { path: '/api/auth' });
   res.json({ ok: true });
+});
+
+const RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'email is required' });
+
+  // Always return 200 immediately — prevents email enumeration
+  res.json({ ok: true });
+
+  try {
+    const user = db.prepare('SELECT id, email, username FROM users WHERE email = ?')
+      .get(email.trim().toLowerCase());
+    if (!user) return;
+
+    // Replace any existing unused token for this user
+    db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(user.id);
+
+    const token    = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+    db.prepare('INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
+      .run(user.id, hashToken(token), expiresAt);
+
+    const appUrl    = process.env.APP_URL || 'http://localhost:8080';
+    const resetLink = `${appUrl}/?reset=${token}`;
+
+    await sendMail({
+      to:      user.email,
+      subject: 'Powerlift — password reset',
+      text:    `Hi ${user.username},\n\nReset your password (link valid for 1 hour):\n${resetLink}\n\nIf you didn't request this, ignore this email.`,
+      html:    `<p>Hi ${user.username},</p><p>Click the link below to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you didn't request this, ignore this email.</p>`,
+    });
+  } catch (err) {
+    console.error('Forgot-password error:', err);
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password)
+    return res.status(400).json({ error: 'token and password are required' });
+  if (password.length < 8)
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  const row = db.prepare('SELECT * FROM password_reset_tokens WHERE token_hash = ?').get(hashToken(token));
+  if (!row) return res.status(400).json({ error: 'Invalid or expired reset link' });
+  if (new Date(row.expires_at) < new Date()) {
+    db.prepare('DELETE FROM password_reset_tokens WHERE id = ?').run(row.id);
+    return res.status(400).json({ error: 'Reset link has expired — please request a new one' });
+  }
+
+  try {
+    const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, row.user_id);
+    db.prepare('DELETE FROM password_reset_tokens WHERE id = ?').run(row.id);
+    // Invalidate all refresh tokens so all sessions are signed out
+    db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(row.user_id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Reset-password error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;

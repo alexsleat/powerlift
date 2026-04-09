@@ -1704,6 +1704,45 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const [sessionDurationMins, setSessionDurationMins] = useState(null);
   const sessionStartTsRef = useRef(null);
 
+  // ── Session draft (crash recovery) ─────────────────────────────────────────
+  const DRAFT_KEY = 'pl-session-draft';
+
+  const [draftOffer, setDraftOffer] = useState(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+
+  function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+
+  function restoreDraft(draft) {
+    setSessionPlan(draft.sessionPlan);
+    setSetResults(draft.setResults || {});
+    setWeightOverrides(draft.weightOverrides || {});
+    setCurrentExIdx(draft.currentExIdx || 0);
+    setSessionNotes(draft.sessionNotes || "");
+    setSessionDate(draft.sessionDate || new Date().toISOString().split("T")[0]);
+    setSessionTime(draft.sessionTime || new Date().toTimeString().slice(0, 5));
+    setExpandedSet(new Set([draft.currentExIdx || 0]));
+    sessionStartTsRef.current = draft.sessionStartTs || Date.now();
+    setResting(false);
+    setDraftOffer(null);
+    setPhase("session");
+  }
+
+  // Auto-save draft whenever session state changes
+  useEffect(() => {
+    if (phase !== "session" || !sessionPlan || sessionPlan.editingSessionId) return;
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        sessionPlan, setResults, weightOverrides, currentExIdx,
+        sessionNotes, sessionDate, sessionTime,
+        sessionStartTs: sessionStartTsRef.current,
+      }));
+    } catch { /* storage full — ignore */ }
+  }, [phase, sessionPlan, setResults, weightOverrides, currentExIdx, sessionNotes, sessionDate, sessionTime]);
+
   useEffect(() => {
     if (!editingSession) return;
     const inst = rootSchema.programme_instances.find(i => i.id === editingSession.programme_instance_id)
@@ -1847,6 +1886,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   }
 
   function startSession() {
+    clearDraft();
     const inst = rootSchema.programme_instances.find(i => i.id === selectedInstId);
     const tmpl = rootSchema.programme_templates.find(t => t.id === inst?.template_id);
     if (!inst || !tmpl) return;
@@ -1998,6 +2038,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const preview       = previewInst && selTmpl ? previewCycleSessions(previewInst, selTmpl, rootSchema, 5) : [];
 
     function handleStartSession() {
+      clearDraft();
       if (dayOverride) {
         const inst = rootSchema.programme_instances.find(i => i.id === selectedInstId);
         const tmpl = rootSchema.programme_templates.find(t => t.id === inst?.template_id);
@@ -2023,6 +2064,22 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     return (
       <div>
         <div style={S.h1}>Start Session</div>
+
+        {draftOffer && !editingSession && (
+          <div style={{ ...S.card, border: "1px solid var(--warning)", marginBottom: "16px" }}>
+            <div style={S.cardBody}>
+              <div style={{ color: "var(--warning)", fontWeight: "700", fontSize: "15px", marginBottom: "6px" }}>Unsaved session found</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "14px" }}>
+                {draftOffer.sessionPlan?.weekLabel} — Day {draftOffer.sessionPlan?.day}
+                {draftOffer.sessionDate ? ` · ${draftOffer.sessionDate}` : ""}
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button style={{ ...S.btn("primary"), flex: 1 }} onClick={() => restoreDraft(draftOffer)}>Resume →</button>
+                <button style={{ ...S.btn("default"), flex: 1 }} onClick={() => { clearDraft(); setDraftOffer(null); }}>Discard</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {reviewInst && reviewTmpl && (
           <TmReviewPanel inst={reviewInst} tmpl={reviewTmpl} units={units} rootSchema={rootSchema} onChange={onSchemaChange} />
@@ -2182,7 +2239,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
             <button style={S.btnSm("warning")} onClick={() => { setPhase("summary"); setResting(false); }}>Save</button>
-            <button style={S.btnSm("danger")}  onClick={() => { setPhase("pick");    setResting(false); }}>Abandon</button>
+            <button style={S.btnSm("danger")}  onClick={() => { clearDraft(); setPhase("pick"); setResting(false); }}>Abandon</button>
           </div>
         </div>
 
@@ -2243,6 +2300,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                 ...ex, sets: ex.sets.map((set, setIdx) => ({ ...set, weight: getEffectiveWeight(exIdx, setIdx, set) }))
               }))
             };
+            clearDraft();
             onSessionComplete({
               plan: planWithWeights, results: setResults, notes: sessionNotes,
               sessionDate, sessionTime, sessionDurationMins,

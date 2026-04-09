@@ -47,10 +47,12 @@ export const api = {
   clearToken()     { accessToken = null; },
 
   auth: {
-    register: (body) => request('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
-    login:    (body) => request('/auth/login',    { method: 'POST', body: JSON.stringify(body) }),
-    logout:   ()     => request('/auth/logout',   { method: 'POST' }),
-    refresh:  _tryRefresh,
+    register:       (body) => request('/auth/register',        { method: 'POST', body: JSON.stringify(body) }),
+    login:          (body) => request('/auth/login',           { method: 'POST', body: JSON.stringify(body) }),
+    logout:         ()     => request('/auth/logout',          { method: 'POST' }),
+    refresh:        _tryRefresh,
+    forgotPassword: (body) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
+    resetPassword:  (body) => request('/auth/reset-password',  { method: 'POST', body: JSON.stringify(body) }),
   },
 
   data: {
