@@ -180,10 +180,10 @@ const S = {
     fontFamily: FONT,
     background: "var(--bg)",
     color: "var(--text)",
-    minHeight: "100vh",
+    height: "100%",
     display: "flex",
     flexDirection: "column",
-    fontSize: "14px",
+    fontSize: "16px",
   },
 
   // ── Header (top bar) ─────────────────────────────────────────────────────
@@ -194,7 +194,7 @@ const S = {
     padding: "0 14px",
     background: "var(--surface)",
     borderBottom: "1px solid var(--border)",
-    height: "48px",
+    height: "54px",
     flexShrink: 0,
     gap: "8px",
     position: "sticky",
@@ -202,7 +202,7 @@ const S = {
     zIndex: 40,
   },
   headerLogo: {
-    fontSize: "14px",
+    fontSize: "16px",
     fontWeight: "700",
     color: "var(--text)",
     letterSpacing: "0.18em",
@@ -216,7 +216,7 @@ const S = {
     padding: "5px 10px",
     cursor: "pointer",
     fontFamily: FONT,
-    fontSize: "12px",
+    fontSize: "14px",
     borderRadius: "5px",
     minHeight: "32px",
     WebkitTapHighlightColor: "transparent",
@@ -246,15 +246,15 @@ const S = {
     color: a ? "var(--accent)" : "var(--text-dim)",
     cursor: "pointer",
     fontFamily: FONT,
-    fontSize: "9px",
+    fontSize: "11px",
     letterSpacing: "0.08em",
     textTransform: "uppercase",
     padding: "8px 4px",
     WebkitTapHighlightColor: "transparent",
     outline: "none",
-    minHeight: "54px",
+    minHeight: "60px",
   }),
-  navIcon: { fontSize: "17px", lineHeight: "1.2" },
+  navIcon: { fontSize: "20px", lineHeight: "1.2" },
 
   // ── Layout ───────────────────────────────────────────────────────────────
   main: { flex: 1, overflow: "hidden" },
@@ -262,7 +262,7 @@ const S = {
     height: "100%",
     overflowY: "auto",
     padding: "16px",
-    paddingBottom: "calc(70px + env(safe-area-inset-bottom))",
+    paddingBottom: "calc(76px + env(safe-area-inset-bottom))",
     WebkitOverflowScrolling: "touch",
     boxSizing: "border-box",
   },
@@ -287,7 +287,7 @@ const S = {
 
   // ── Typography ───────────────────────────────────────────────────────────
   h1: {
-    fontSize: "11px",
+    fontSize: "13px",
     fontWeight: "700",
     color: "var(--text-dim)",
     margin: "0 0 16px",
@@ -295,7 +295,7 @@ const S = {
     textTransform: "uppercase",
   },
   h3: {
-    fontSize: "11px",
+    fontSize: "13px",
     fontWeight: "700",
     color: "var(--text-muted)",
     margin: "0",
@@ -303,14 +303,14 @@ const S = {
     textTransform: "uppercase",
   },
   label: {
-    fontSize: "11px",
+    fontSize: "13px",
     color: "var(--text-dim)",
     display: "block",
     marginBottom: "5px",
     letterSpacing: "0.06em",
     textTransform: "uppercase",
   },
-  mono: { fontFamily: FONT, fontSize: "14px", color: "var(--accent)" },
+  mono: { fontFamily: FONT, fontSize: "16px", color: "var(--accent)" },
 
   // ── Form elements (16px prevents iOS auto-zoom) ──────────────────────────
   input: {
@@ -367,7 +367,7 @@ const S = {
       ...(vs[v] || vs.default),
       padding: "10px 18px",
       cursor: "pointer",
-      fontSize: "14px",
+      fontSize: "16px",
       fontFamily: FONT,
       letterSpacing: "0.04em",
       minHeight: "44px",
@@ -391,7 +391,7 @@ const S = {
       ...(vs[v] || vs.default),
       padding: "6px 12px",
       cursor: "pointer",
-      fontSize: "12px",
+      fontSize: "14px",
       fontFamily: FONT,
       letterSpacing: "0.04em",
       borderRadius: "5px",
@@ -402,12 +402,12 @@ const S = {
   },
 
   // ── Table ────────────────────────────────────────────────────────────────
-  table:  { width: "100%", borderCollapse: "collapse", fontSize: "13px" },
-  th:     { padding: "8px 10px", textAlign: "left", background: "var(--surface-2)", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" },
+  table:  { width: "100%", borderCollapse: "collapse", fontSize: "15px" },
+  th:     { padding: "8px 10px", textAlign: "left", background: "var(--surface-2)", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase" },
   td:     { padding: "10px", borderBottom: "1px solid var(--border)", color: "var(--text)", verticalAlign: "middle" },
 
   // ── Misc ─────────────────────────────────────────────────────────────────
-  badge:  (c = "var(--surface-3)") => ({ display: "inline-flex", alignItems: "center", background: c, color: "var(--text-muted)", padding: "2px 8px", fontSize: "10px", marginRight: "4px", borderRadius: "4px", letterSpacing: "0.06em", fontWeight: "700" }),
+  badge:  (c = "var(--surface-3)") => ({ display: "inline-flex", alignItems: "center", background: c, color: "var(--text-muted)", padding: "2px 8px", fontSize: "12px", marginRight: "4px", borderRadius: "4px", letterSpacing: "0.06em", fontWeight: "700" }),
   flex:   { display: "flex", alignItems: "center", gap: "8px" },
   grid2:  { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" },
   subNav: { display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" },
@@ -464,13 +464,13 @@ function LogSetModal({ set, setLabel, onConfirm, onClose, units, defaultRpe, def
       <div style={{ ...S.h3, marginBottom: "4px", color: isEdit ? "var(--warning)" : "var(--text-muted)" }}>
         {isEdit ? "Edit Set" : setLabel}
       </div>
-      {isEdit && <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>{setLabel}</div>}
+      {isEdit && <div style={{ color: "var(--text-dim)", fontSize: "14px", marginBottom: "14px" }}>{setLabel}</div>}
 
       <Stepper label={`Weight (${units})`} value={weight} display={`${weight} ${units}`}
         onDec={() => adjW(-bigInc)} onInc={() => adjW(bigInc)} />
       <div style={{ display: "flex", gap: "4px", marginBottom: "18px" }}>
         {[-bigInc * 2, -bigInc, -inc, inc, bigInc, bigInc * 2].map(d => (
-          <button key={d} style={{ ...S.btnSm(d < 0 ? "danger" : "success"), flex: 1, fontSize: "11px" }}
+          <button key={d} style={{ ...S.btnSm(d < 0 ? "danger" : "success"), flex: 1, fontSize: "13px" }}
             onPointerDown={() => adjW(d)}>
             {d > 0 ? "+" : ""}{d}
           </button>
@@ -513,7 +513,7 @@ function EditWeightModal({ weight, units, onConfirm, onClose }) {
         onDec={() => adj(-bigInc)} onInc={() => adj(bigInc)} />
       <div style={{ display: "flex", gap: "4px", marginBottom: "18px" }}>
         {[-bigInc * 2, -bigInc, -inc, inc, bigInc, bigInc * 2].map(d => (
-          <button key={d} style={{ ...S.btnSm(d < 0 ? "danger" : "success"), flex: 1, fontSize: "11px" }}
+          <button key={d} style={{ ...S.btnSm(d < 0 ? "danger" : "success"), flex: 1, fontSize: "13px" }}
             onPointerDown={() => adj(d)}>
             {d > 0 ? "+" : ""}{d}
           </button>
@@ -542,9 +542,9 @@ function JsonViewer({ data, onSave }) {
       <div style={{ ...S.flex, marginBottom: "10px", flexWrap: "wrap" }}>
         <button style={S.btn("primary")} onClick={save}>Apply Changes</button>
         <button style={S.btn()} onClick={() => setRaw(JSON.stringify(data, null, 2))}>Reset</button>
-        {error && <span style={{ color: "var(--danger)", fontSize: "12px" }}>Error: {error}</span>}
+        {error && <span style={{ color: "var(--danger)", fontSize: "14px" }}>Error: {error}</span>}
       </div>
-      <textarea style={{ ...S.textarea, minHeight: "500px", color: "var(--accent)", fontSize: "11px" }}
+      <textarea style={{ ...S.textarea, minHeight: "500px", color: "var(--accent)", fontSize: "13px" }}
         value={raw} onChange={e => setRaw(e.target.value)} />
     </div>
   );
@@ -714,9 +714,9 @@ function PlateCalculator({ units, sessionContext }) {
       {sessionContext?.exName && (
         <div style={{ ...S.card, borderColor: "var(--accent-dim)", marginBottom: "12px" }}>
           <div style={{ ...S.cardBody, padding: "12px 16px" }}>
-            <div style={{ color: "var(--accent)", fontSize: "11px", marginBottom: "6px", letterSpacing: "0.06em", textTransform: "uppercase" }}>Session — Next Set</div>
+            <div style={{ color: "var(--accent)", fontSize: "13px", marginBottom: "6px", letterSpacing: "0.06em", textTransform: "uppercase" }}>Session — Next Set</div>
             <div style={{ ...S.flex, justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
-              <span style={{ color: "var(--text)", fontSize: "14px" }}>{sessionContext.exName}</span>
+              <span style={{ color: "var(--text)", fontSize: "16px" }}>{sessionContext.exName}</span>
               <button style={S.btnSm("active")} onClick={() => setTarget(dspW(sessionContext.weight, units))}>
                 Use {fmtW(sessionContext.weight, units)}
               </button>
@@ -765,9 +765,9 @@ function PlateCalculator({ units, sessionContext }) {
               <div style={{ marginTop: "12px" }}>
                 <div style={{ ...S.label, marginBottom: "8px" }}>Per side</div>
                 {result.plates.length === 0
-                  ? <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>Bar only</div>
+                  ? <div style={{ color: "var(--text-dim)", fontSize: "15px" }}>Bar only</div>
                   : result.plates.map((p, i) => (
-                    <div key={i} style={{ ...S.flex, fontSize: "14px", marginBottom: "6px" }}>
+                    <div key={i} style={{ ...S.flex, fontSize: "16px", marginBottom: "6px" }}>
                       <span style={S.mono}>{p.count}×</span>
                       <div style={{ width: "16px", height: "16px", background: PLATE_COLORS[p.weight] || "#505050", borderRadius: "2px" }} />
                       <span style={{ color: "var(--text)" }}>{p.weight}{units}</span>
@@ -775,19 +775,19 @@ function PlateCalculator({ units, sessionContext }) {
                   ))
                 }
                 {result.remainder > 0.05 && (
-                  <div style={{ color: "var(--warning)", fontSize: "12px", marginTop: "8px" }}>
+                  <div style={{ color: "var(--warning)", fontSize: "14px", marginTop: "8px" }}>
                     ⚠ {result.remainder.toFixed(2)}{units}/side unloaded
                   </div>
                 )}
               </div>
 
               <div style={{ borderTop: "1px solid var(--border)", marginTop: "16px", paddingTop: "12px", ...S.flex, justifyContent: "space-between" }}>
-                <span style={{ color: "var(--text-dim)", fontSize: "12px" }}>Total loaded</span>
+                <span style={{ color: "var(--text-dim)", fontSize: "14px" }}>Total loaded</span>
                 <span style={{ ...S.mono, fontSize: "18px" }}>{target}{units}</span>
               </div>
             </>
           ) : (
-            <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>Target must exceed bar weight.</div>
+            <div style={{ color: "var(--text-dim)", fontSize: "15px" }}>Target must exceed bar weight.</div>
           )}
         </div>
       </div>
@@ -897,15 +897,15 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
             <div key={lift.id} style={S.card}>
               {/* Card header */}
               <div style={{ ...S.cardHead, flexWrap: "wrap", gap: "6px" }}>
-                <span style={{ fontWeight: "700", color: lift.color, fontSize: "14px" }}>{lift.name}</span>
+                <span style={{ fontWeight: "700", color: lift.color, fontSize: "16px" }}>{lift.name}</span>
                 <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginLeft: "auto" }}>
                   {lift.currentKg != null && (
-                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                    <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>
                       Est. now <span style={{ color: lift.color, fontWeight: "700" }}>{fmtW(Math.round(lift.currentKg * 2) / 2, units)}</span>
                     </span>
                   )}
                   {lift.bestKg != null && (
-                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                    <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>
                       Best 1RM <span style={{ color: "var(--text)", fontWeight: "700" }}>{fmtW(lift.bestKg, units)}</span>
                       {lift.bestDate && <span style={{ color: "var(--text-dim)", marginLeft: "4px" }}>{lift.bestDate}</span>}
                     </span>
@@ -923,7 +923,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                     onDotClick={sid => onNavigateToSession?.(sid)}
                   />
                 ) : (
-                  <div style={{ color: "var(--text-dim)", fontSize: "12px", padding: "16px 0", textAlign: "center" }}>
+                  <div style={{ color: "var(--text-dim)", fontSize: "14px", padding: "16px 0", textAlign: "center" }}>
                     Log at least 2 sessions to see chart
                   </div>
                 )}
@@ -937,7 +937,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                     <div style={S.label}>Best 1RM</div>
                     <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "15px" }}>{fmtW(lift.bestKg, units)}</div>
                     <button
-                      style={{ background: "transparent", border: "none", color: "var(--accent)", fontSize: "11px", cursor: "pointer", padding: "2px 0", fontFamily: FONT }}
+                      style={{ background: "transparent", border: "none", color: "var(--accent)", fontSize: "13px", cursor: "pointer", padding: "2px 0", fontFamily: FONT }}
                       onClick={() => onNavigateToSession?.(lift.bestEntry.session_id)}>
                       {lift.bestDate} →
                     </button>
@@ -950,11 +950,11 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                     <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "15px" }}>
                       {fmtW(lift.best10rm.weight_kg, units)} × {lift.best10rm.reps}
                     </div>
-                    <div style={{ color: "var(--text-dim)", fontSize: "11px" }}>
+                    <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>
                       e1RM ≈ {fmtW(Math.round(lift.best10rm.e1rm), units)}
                     </div>
                     <button
-                      style={{ background: "transparent", border: "none", color: "var(--accent)", fontSize: "11px", cursor: "pointer", padding: "2px 0", fontFamily: FONT }}
+                      style={{ background: "transparent", border: "none", color: "var(--accent)", fontSize: "13px", cursor: "pointer", padding: "2px 0", fontFamily: FONT }}
                       onClick={() => onNavigateToSession?.(lift.best10rm.sessionId)}>
                       {lift.best10rm.date} →
                     </button>
@@ -964,7 +964,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
             </div>
           ))}
           {liftData.every(l => l.points.length === 0) && (
-            <div style={{ color: "var(--text-dim)", fontSize: "13px", textAlign: "center", padding: "32px 0" }}>
+            <div style={{ color: "var(--text-dim)", fontSize: "15px", textAlign: "center", padding: "32px 0" }}>
               Complete sessions to see progress.
             </div>
           )}
@@ -976,7 +976,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
         <>
           {/* Bodyweight prompt if missing */}
           {!bwKg && (
-            <div style={{ color: "var(--warning)", fontSize: "12px", background: "var(--warning-dim)", border: "1px solid var(--border)", borderRadius: "6px", padding: "10px 14px", marginBottom: "12px" }}>
+            <div style={{ color: "var(--warning)", fontSize: "14px", background: "var(--warning-dim)", border: "1px solid var(--border)", borderRadius: "6px", padding: "10px 14px", marginBottom: "12px" }}>
               Set your bodyweight in Settings → Setup → Profile to enable Wilks and DOTS scores.
             </div>
           )}
@@ -988,11 +988,11 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
               {/* Per-lift row */}
               {pfData.map(l => (
                 <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                  <span style={{ color: l.color, fontWeight: "700", fontSize: "13px", width: "80px" }}>{l.name}</span>
-                  <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                  <span style={{ color: l.color, fontWeight: "700", fontSize: "15px", width: "80px" }}>{l.name}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                     Best <span style={{ color: "var(--text)" }}>{l.bestKg != null ? fmtW(l.bestKg, units) : "—"}</span>
                   </span>
-                  <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                  <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                     Est. <span style={{ color: l.color }}>{l.currentKg != null ? fmtW(Math.round(l.currentKg * 2) / 2, units) : "—"}</span>
                   </span>
                 </div>
@@ -1003,10 +1003,10 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
                   <span style={{ ...S.h3 }}>Total</span>
                   <div style={{ display: "flex", gap: "20px" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                       Best <span style={{ color: "var(--text)", fontWeight: "700" }}>{bestTotal != null ? fmtW(Math.round(bestTotal), units) : "—"}</span>
                     </span>
-                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                       Est. <span style={{ color: "var(--accent)", fontWeight: "700" }}>{currentTotal != null ? fmtW(Math.round(currentTotal), units) : "—"}</span>
                     </span>
                   </div>
@@ -1016,10 +1016,10 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
                   <span style={{ ...S.h3 }}>Wilks</span>
                   <div style={{ display: "flex", gap: "20px" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                       Best <span style={{ color: "var(--text)", fontWeight: "700" }}>{bestWilks ?? "—"}</span>
                     </span>
-                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                       Est. <span style={{ color: "var(--accent)", fontWeight: "700" }}>{currentWilks ?? "—"}</span>
                     </span>
                   </div>
@@ -1029,17 +1029,17 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ ...S.h3 }}>DOTS</span>
                   <div style={{ display: "flex", gap: "20px" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                       Best <span style={{ color: "var(--text)", fontWeight: "700" }}>{bestDots ?? "—"}</span>
                     </span>
-                    <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
                       Est. <span style={{ color: "var(--accent)", fontWeight: "700" }}>{currentDots ?? "—"}</span>
                     </span>
                   </div>
                 </div>
 
                 {!bwKg && (
-                  <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "8px" }}>Wilks / DOTS require bodyweight</div>
+                  <div style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: "8px" }}>Wilks / DOTS require bodyweight</div>
                 )}
               </div>
             </div>
@@ -1054,7 +1054,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
           <div style={{ padding: "8px" }}>
             {tonnageBars.length > 0
               ? <BarChart bars={tonnageBars} color="#1a3a4a" />
-              : <div style={{ color: "var(--text-dim)", fontSize: "13px", padding: "16px", textAlign: "center" }}>No sessions yet.</div>
+              : <div style={{ color: "var(--text-dim)", fontSize: "15px", padding: "16px", textAlign: "center" }}>No sessions yet.</div>
             }
           </div>
         </div>
@@ -1098,7 +1098,7 @@ function BackupRestore({ rootSchema, exLib, onRestore }) {
       <button style={S.btn("primary")} onClick={backup}>⬇ Download Backup</button>
       <button style={S.btn()} onClick={() => fileRef.current?.click()}>⬆ Restore from File</button>
       <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={restore} />
-      {err && <span style={{ color: "var(--danger)", fontSize: "12px", alignSelf: "center" }}>Error: {err}</span>}
+      {err && <span style={{ color: "var(--danger)", fontSize: "14px", alignSelf: "center" }}>Error: {err}</span>}
     </div>
   );
 }
@@ -1264,11 +1264,11 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
       )}
       <div style={{ ...S.card, borderColor: "var(--card-done-bdr)", marginBottom: "16px" }}>
         <div style={{ ...S.cardHead, background: "var(--success-dim)" }}>
-          <span style={{ fontWeight: "bold", color: "var(--success)", fontSize: "13px" }}>Cycle Complete — Review TMs</span>
-          <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>{tmpl?.name}</span>
+          <span style={{ fontWeight: "bold", color: "var(--success)", fontSize: "15px" }}>Cycle Complete — Review TMs</span>
+          <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>{tmpl?.name}</span>
         </div>
         <div style={S.cardBody}>
-          <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "12px" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "12px" }}>
             Tap New TM to edit. "Use e1RM" sets TM from your best estimated 1RM ({Math.round(tmPct * 100)}%).
           </div>
           <table style={S.table}>
@@ -1287,12 +1287,12 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
                     <td style={S.td}>
                       {bestE1rm ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                          <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>{fmtW(bestE1rm, units)}</span>
+                          <span style={{ color: "var(--text-muted)", fontSize: "15px" }}>{fmtW(bestE1rm, units)}</span>
                           <button style={S.btnSm("warning")} onClick={() =>
                             setNewTMs(prev => prev.map((t, j) => j === i ? { ...t, new_kg: fromE1rm } : t))
                           }>→{fmtW(fromE1rm, units)}</button>
                         </div>
-                      ) : <span style={{ color: "var(--text-dim)", fontSize: "12px" }}>no data</span>}
+                      ) : <span style={{ color: "var(--text-dim)", fontSize: "14px" }}>no data</span>}
                     </td>
                     <td style={S.td}>
                       <button style={S.btnSm("active")} onClick={() => setEditIdx(i)}>
@@ -1322,7 +1322,7 @@ function SchemaSection({ title, children, defaultOpen = true }) {
     <div style={S.card}>
       <div style={{ ...S.cardHead, cursor: "pointer" }} onClick={() => setOpen(o => !o)}>
         <span style={S.h3}>{title}</span>
-        <span style={{ color: "var(--text-dim)", fontSize: "14px" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ color: "var(--text-dim)", fontSize: "16px" }}>{open ? "▲" : "▼"}</span>
       </div>
       {open && <div style={S.cardBody}>{children}</div>}
     </div>
@@ -1360,9 +1360,9 @@ function LiftSetsPreview({ exId, tmKg, tmpl, units }) {
       <div style={{ ...S.label, marginBottom: "6px" }}>Top sets preview</div>
       {rows.map((row, i) => (
         <div key={i} style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "4px", flexWrap: "wrap" }}>
-          <span style={{ color: "var(--text-dim)", fontSize: "11px", minWidth: "72px" }}>{row.label}</span>
+          <span style={{ color: "var(--text-dim)", fontSize: "13px", minWidth: "72px" }}>{row.label}</span>
           {row.sets.map((s, j) => (
-            <span key={j} style={{ color: "var(--accent)", fontSize: "12px" }}>
+            <span key={j} style={{ color: "var(--accent)", fontSize: "14px" }}>
               {s.reps === "amrap" ? "AMRAP" : s.reps}×{fmtW(s.weight, units)}
             </span>
           ))}
@@ -1449,7 +1449,7 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
             </select>
           </div>
           {tmpl && (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "14px" }}>
+            <div style={{ fontSize: "14px", color: "var(--text-muted)", marginBottom: "14px" }}>
               TMs set at {Math.round(tmPct * 100)}% of 1RM.
               <div style={{ marginTop: "4px", color: "var(--text-dim)" }}>{tmpl.description}</div>
             </div>
@@ -1464,7 +1464,7 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
           <div style={{ display: "flex", gap: "6px", marginBottom: "16px", alignItems: "center", flexWrap: "wrap" }}>
             <button style={S.btnSm(inputMode === "1rm" ? "active" : "default")} onClick={() => setInputMode("1rm")}>Enter 1RM</button>
             <button style={S.btnSm(inputMode === "tm"  ? "active" : "default")} onClick={() => setInputMode("tm")}>Enter TM</button>
-            <span style={{ color: "var(--text-dim)", fontSize: "11px", marginLeft: "4px" }}>TM = {Math.round(tmPct * 100)}% of 1RM</span>
+            <span style={{ color: "var(--text-dim)", fontSize: "13px", marginLeft: "4px" }}>TM = {Math.round(tmPct * 100)}% of 1RM</span>
           </div>
           {exIds.map(exId => {
             const exInfo  = exLib?.exercises?.find(e => e.id === exId) || { name: (LIFT_META[exId]?.name || exId.replace("ex_", "")) };
@@ -1479,7 +1479,7 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
                 <input style={S.input} type="number" step={units === "lb" ? "5" : "2.5"}
                   value={inputs[exId] ?? ""}
                   onChange={e => setInputs(prev => ({ ...prev, [exId]: e.target.value }))} />
-                {otherVal && <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "4px" }}>{otherVal}</div>}
+                {otherVal && <div style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>{otherVal}</div>}
                 <LiftSetsPreview exId={exId} tmKg={tmKg} tmpl={tmpl} units={units} />
               </div>
             );
@@ -1580,7 +1580,7 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
           </SchemaSection>
 
           <SchemaSection title="Rest Timer Defaults" defaultOpen={false}>
-            <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>Seconds of rest after each set type.</div>
+            <div style={{ color: "var(--text-dim)", fontSize: "14px", marginBottom: "14px" }}>Seconds of rest after each set type.</div>
             {[["main", "Main Lift"], ["supplemental", "Supplemental"], ["assistance", "Assistance"]].map(([role, label]) => (
               <div key={role} style={{ marginBottom: "12px" }}>
                 <label style={S.label}>{label} (seconds)</label>
@@ -1603,15 +1603,15 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
           <NewProgrammePanel rootSchema={rootSchema} exLib={exLib} onChange={onChange} />
 
           <SchemaSection title={`Active (${activeInsts.length})`}>
-            {activeInsts.length === 0 && <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>None. Start one above.</div>}
+            {activeInsts.length === 0 && <div style={{ color: "var(--text-dim)", fontSize: "15px" }}>None. Start one above.</div>}
             {activeInsts.map(inst => {
               const tmpl = rootSchema.programme_templates.find(t => t.id === inst.template_id);
               return (
                 <div key={inst.id} style={{ marginBottom: "20px" }}>
                   <div style={{ ...S.flex, marginBottom: "10px", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
                     <div>
-                      <div style={{ color: "var(--text)", fontWeight: "bold", fontSize: "14px" }}>{tmpl?.name || inst.template_id}</div>
-                      <div style={{ color: "var(--text-dim)", fontSize: "12px", marginTop: "2px" }}>Cycle {inst.current_cycle} · W{inst.current_week}D{inst.current_day}</div>
+                      <div style={{ color: "var(--text)", fontWeight: "bold", fontSize: "16px" }}>{tmpl?.name || inst.template_id}</div>
+                      <div style={{ color: "var(--text-dim)", fontSize: "14px", marginTop: "2px" }}>Cycle {inst.current_cycle} · W{inst.current_week}D{inst.current_day}</div>
                     </div>
                     <button style={S.btnSm("warning")} onClick={() => archiveInst(inst.id)}>Archive</button>
                   </div>
@@ -1643,8 +1643,8 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
                 return (
                   <div key={inst.id} style={{ ...S.flex, justifyContent: "space-between", marginBottom: "10px", flexWrap: "wrap", gap: "6px" }}>
                     <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>{tmpl?.name || inst.template_id}</div>
-                      <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "2px" }}>Started {inst.started_date} · Cycle {inst.current_cycle}</div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "15px" }}>{tmpl?.name || inst.template_id}</div>
+                      <div style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: "2px" }}>Started {inst.started_date} · Cycle {inst.current_cycle}</div>
                     </div>
                     <button style={S.btnSm()} onClick={() => restoreInst(inst.id)}>Restore</button>
                   </div>
@@ -1658,7 +1658,7 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
       {/* ── Library ── */}
       {sub === "library" && (
         <div>
-          <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>Edit the exercise library JSON directly.</div>
+          <div style={{ color: "var(--text-dim)", fontSize: "14px", marginBottom: "14px" }}>Edit the exercise library JSON directly.</div>
           <JsonViewer data={exLib} onSave={onExLibChange} />
         </div>
       )}
@@ -1666,7 +1666,7 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
       {/* ── Raw JSON ── */}
       {sub === "json" && (
         <div>
-          <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "14px" }}>Edit the full schema JSON directly. Changes apply immediately.</div>
+          <div style={{ color: "var(--text-dim)", fontSize: "14px", marginBottom: "14px" }}>Edit the full schema JSON directly. Changes apply immediately.</div>
           <JsonViewer data={rootSchema} onSave={onChange} />
         </div>
       )}
@@ -1889,18 +1889,18 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
       <>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px", marginBottom: "4px", background: rowBg, border: `1px solid ${rowBorder}`, borderRadius: "6px" }}>
           {/* Set number */}
-          <div style={{ width: "22px", textAlign: "center", color: "var(--text-dim)", fontSize: "12px", flexShrink: 0, fontWeight: "600" }}>{setNum}</div>
+          <div style={{ width: "22px", textAlign: "center", color: "var(--text-dim)", fontSize: "14px", flexShrink: 0, fontWeight: "600" }}>{setNum}</div>
 
           {/* Weight */}
           <button
-            style={{ background: "transparent", border: `1px solid ${done ? rowBorder : "var(--border)"}`, color: weight > 0 ? "var(--accent)" : "var(--text-dim)", padding: "5px 10px", fontSize: "14px", fontFamily: FONT, cursor: (!done && weight > 0) ? "pointer" : "default", minWidth: "64px", borderRadius: "5px", fontWeight: "600" }}
+            style={{ background: "transparent", border: `1px solid ${done ? rowBorder : "var(--border)"}`, color: weight > 0 ? "var(--accent)" : "var(--text-dim)", padding: "5px 10px", fontSize: "16px", fontFamily: FONT, cursor: (!done && weight > 0) ? "pointer" : "default", minWidth: "64px", borderRadius: "5px", fontWeight: "600" }}
             onClick={() => !done && weight > 0 && setWeightModal({ exIdx, setIdx, weight })}
             disabled={done || weight === 0}>
             {weight > 0 ? fmtW(weight, units) : "—"}
           </button>
 
           {/* Reps */}
-          <div style={{ flex: 1, color: done ? "var(--warning)" : "var(--text-muted)", fontSize: "13px" }}>
+          <div style={{ flex: 1, color: done ? "var(--warning)" : "var(--text-muted)", fontSize: "15px" }}>
             {done ? `${result.reps} reps` : plannedReps}
           </div>
 
@@ -1909,7 +1909,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             // Expected RPE: from set definition, or infer from role (AMRAP = high effort)
             const targetRpe = set.target_rpe ?? (set.isAmrap ? "8+" : exEntry.role === "main" ? "8" : "7");
             return (
-              <div style={{ minWidth: "44px", color: done ? "var(--accent)" : "var(--text-dim)", fontSize: "12px", textAlign: "right" }}>
+              <div style={{ minWidth: "44px", color: done ? "var(--accent)" : "var(--text-dim)", fontSize: "14px", textAlign: "right" }}>
                 {done && result.rpe != null ? `@${result.rpe}` : `@${targetRpe}`}
               </div>
             );
@@ -1925,12 +1925,12 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
               title="Tap to edit">✓</button>
           ) : (
             <button
-              style={{ ...S.btnSm("success"), minWidth: "52px", fontSize: "13px", padding: "7px 12px", flexShrink: 0, fontWeight: "700" }}
+              style={{ ...S.btnSm("success"), minWidth: "52px", fontSize: "15px", padding: "7px 12px", flexShrink: 0, fontWeight: "700" }}
               onClick={() => setLogModal({ exIdx, setIdx })}>LOG</button>
           )}
         </div>
         {hint && (
-          <div style={{ padding: "3px 10px 5px 42px", fontSize: "11px", color: "var(--warning)", background: "var(--warning-dim)", marginBottom: "3px", borderRadius: "0 0 5px 5px" }}>
+          <div style={{ padding: "3px 10px 5px 42px", fontSize: "13px", color: "var(--warning)", background: "var(--warning-dim)", marginBottom: "3px", borderRadius: "0 0 5px 5px" }}>
             ↳ {hint}
           </div>
         )}
@@ -1958,18 +1958,18 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         <div style={{ ...S.cardHead, cursor: "pointer", background: headBg, minHeight: "52px" }}
           onClick={() => toggleExpand(exIdx)}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            {isActive && !allDone && <span style={{ color: "var(--accent)", fontSize: "11px" }}>▶</span>}
+            {isActive && !allDone && <span style={{ color: "var(--accent)", fontSize: "13px" }}>▶</span>}
             <span style={S.badge(roleColor)}>{roleBadge}</span>
-            <span style={{ fontWeight: "bold", fontSize: "14px", color: allDone ? "var(--success)" : isActive ? "var(--text)" : "var(--text-muted)" }}>
+            <span style={{ fontWeight: "bold", fontSize: "16px", color: allDone ? "var(--success)" : isActive ? "var(--text)" : "var(--text-muted)" }}>
               {exInfo.name}
             </span>
-            {ex.label && <span style={{ color: "var(--accent)", fontSize: "12px" }}>{ex.label}</span>}
+            {ex.label && <span style={{ color: "var(--accent)", fontSize: "14px" }}>{ex.label}</span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "8px" }}>
-            <span style={{ color: allDone ? "var(--success)" : "var(--text-muted)", fontSize: "13px", fontWeight: "600" }}>
+            <span style={{ color: allDone ? "var(--success)" : "var(--text-muted)", fontSize: "15px", fontWeight: "600" }}>
               {allDone ? `✓${workSets.length}` : `${doneCount}/${workSets.length}`}
             </span>
-            <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>{isExpanded ? "▲" : "▼"}</span>
+            <span style={{ color: "var(--text-dim)", fontSize: "15px" }}>{isExpanded ? "▲" : "▼"}</span>
           </div>
         </div>
         <div style={{ display: isExpanded ? "block" : "none" }}>
@@ -2032,7 +2032,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           <div style={S.cardHead}><span style={S.h3}>Active Programmes</span></div>
           <div style={S.cardBody}>
             {activeInsts.length === 0 && (
-              <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>No active programmes. Add one in Settings.</div>
+              <div style={{ color: "var(--text-dim)", fontSize: "15px" }}>No active programmes. Add one in Settings.</div>
             )}
             {activeInsts.map(i => {
               const t = rootSchema.programme_templates.find(t => t.id === i.template_id);
@@ -2043,8 +2043,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                   style={{ padding: "14px", marginBottom: "8px", cursor: "pointer", borderRadius: "6px",
                     background: isSelected ? "var(--accent-dim)" : "var(--surface-2)",
                     border: `1px solid ${isSelected ? "var(--card-active-bdr)" : "var(--border)"}` }}>
-                  <div style={{ fontWeight: "bold", color: "var(--text)", fontSize: "14px" }}>{t?.name || i.template_id}</div>
-                  <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "4px" }}>Cycle {i.current_cycle} · Week {i.current_week} · Day {i.current_day}</div>
+                  <div style={{ fontWeight: "bold", color: "var(--text)", fontSize: "16px" }}>{t?.name || i.template_id}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>Cycle {i.current_cycle} · Week {i.current_week} · Day {i.current_day}</div>
                 </div>
               );
             })}
@@ -2055,7 +2055,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           <div style={S.card}>
             <div style={S.cardHead}><span style={S.h3}>Session Select</span></div>
             <div style={S.cardBody}>
-              <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "12px" }}>
+              <div style={{ color: "var(--text-dim)", fontSize: "14px", marginBottom: "12px" }}>
                 Programme is at Week {selInst.current_week} · Day {selInst.current_day}. Choose a different session below — this won't change your programme position.
               </div>
               <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -2086,7 +2086,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                 )}
               </div>
               {isOtherWeek && (
-                <div style={{ color: "var(--warning)", fontSize: "12px", marginTop: "10px", background: "var(--warning-dim)", border: "1px solid var(--border)", padding: "8px 12px", borderRadius: "6px" }}>
+                <div style={{ color: "var(--warning)", fontSize: "14px", marginTop: "10px", background: "var(--warning-dim)", border: "1px solid var(--border)", padding: "8px 12px", borderRadius: "6px" }}>
                   ⚠ Week {effectiveWeek} is not your current week. Saving won't advance your programme position.
                 </div>
               )}
@@ -2094,42 +2094,49 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
         )}
 
-        {preview.length > 0 && (
-          <div style={S.card}>
-            <div style={S.cardHead}><span style={S.h3}>{isOverridden ? "Selected Session" : "Upcoming Sessions"}</span></div>
-            <div style={S.cardBody}>
-              {preview.map(({ plan, isNext }, idx) => (
-                <div key={idx} style={{ marginBottom: idx < preview.length - 1 ? "12px" : 0, paddingBottom: idx < preview.length - 1 ? "12px" : 0, borderBottom: idx < preview.length - 1 ? "1px solid var(--border)" : "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                    {isNext && <span style={{ color: "var(--accent)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>▶ {isOverridden ? "Selected" : "Next"}</span>}
-                    <span style={{ color: isNext ? "var(--text)" : "var(--text-muted)", fontSize: "13px", fontWeight: isNext ? "bold" : "normal" }}>
-                      {plan.weekLabel} — Day {plan.day}
-                    </span>
-                    {plan.role && <span style={{ color: "var(--text-dim)", fontSize: "11px" }}>{plan.role}</span>}
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                    {plan.exercises.map((ex, ei) => {
-                      const exInfo   = getExercise(ex.exercise_id, rootSchema, exLib);
-                      const workSets = ex.sets.filter(s => !s.isWarmup);
-                      const topSet   = workSets[workSets.length - 1];
-                      return (
-                        <div key={ei} style={{ background: "var(--bg)", border: "1px solid var(--border)", padding: "5px 10px", fontSize: "12px", borderRadius: "5px" }}>
-                          <span style={{ color: "var(--text-muted)" }}>{exInfo.name}</span>
-                          {topSet && <span style={{ color: "var(--text-dim)", marginLeft: "6px" }}>{workSets.length}×{topSet.reps === "amrap" ? "AMRAP" : topSet.reps} @ {fmtW(topSet.weight, units)}</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <button style={{ ...S.btn("primary"), width: "100%", padding: "16px", fontSize: "16px" }}
+        <button style={{ ...S.btn("primary"), width: "100%", padding: "16px", fontSize: "18px", marginBottom: "24px" }}
           onClick={handleStartSession} disabled={!selectedInstId || !!reviewInst}>
           {reviewInst ? "Complete TM review above first" : "Begin Session →"}
         </button>
+
+        {preview.length > 0 && (
+          <>
+            <div style={S.h1}>{isOverridden ? "Selected Session" : "Upcoming Sessions"}</div>
+            {preview.map(({ plan, isNext }, idx) => (
+              <div key={idx} style={{ ...S.card, marginBottom: "8px" }}>
+                <div style={S.cardHead}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: "700", color: isNext ? "var(--text)" : "var(--text-muted)", fontSize: "15px" }}>
+                      {isNext && <span style={{ color: "var(--accent)" }}>▶ </span>}
+                      {plan.weekLabel} — Day {plan.day}
+                      {plan.role && <span style={{ color: "var(--text-dim)", fontWeight: "normal", marginLeft: "8px", fontSize: "13px" }}>{plan.role}</span>}
+                    </div>
+                    {isNext && <div style={{ color: "var(--accent)", fontSize: "12px", marginTop: "2px", letterSpacing: "0.06em", textTransform: "uppercase" }}>{isOverridden ? "Selected" : "Next up"}</div>}
+                  </div>
+                </div>
+                <div style={S.cardBody}>
+                  {plan.exercises.map((ex, ei) => {
+                    const exInfo   = getExercise(ex.exercise_id, rootSchema, exLib);
+                    const workSets = ex.sets.filter(s => !s.isWarmup);
+                    return (
+                      <div key={ei} style={{ marginBottom: ei < plan.exercises.length - 1 ? "12px" : 0 }}>
+                        <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "6px", fontWeight: "600", letterSpacing: "0.04em" }}>{exInfo.name}</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                          {workSets.map((s, si) => (
+                            <div key={si} style={{ background: "var(--set-idle-bg)", border: "1px solid var(--set-idle-bdr)", padding: "4px 9px", fontSize: "14px", borderRadius: "5px" }}>
+                              <span style={{ color: "var(--accent)" }}>{fmtW(s.weight, units)}</span>
+                              <span style={{ color: "var(--text-muted)", marginLeft: "5px" }}>×{s.reps === "amrap" ? "AMRAP" : s.reps}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     );
   }
@@ -2171,7 +2178,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "14px", gap: "8px" }}>
           <div>
             <div style={{ fontSize: "18px", fontWeight: "700", color: "var(--text)", letterSpacing: "0.04em" }}>{sessionPlan.weekLabel}</div>
-            <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "2px" }}>Day {sessionPlan.day} · {doneEx}/{totalEx} exercises</div>
+            <div style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "2px" }}>Day {sessionPlan.day} · {doneEx}/{totalEx} exercises</div>
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
             <button style={S.btnSm("warning")} onClick={() => { setPhase("summary"); setResting(false); }}>Save</button>
@@ -2196,7 +2203,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           {isEdit ? "Edit Session" : "Session Complete"}
         </div>
         {isOverrideSession && (
-          <div style={{ color: "var(--text-muted)", fontSize: "12px", background: "var(--warning-dim)", border: "1px solid var(--border)", padding: "10px 14px", borderRadius: "6px", marginBottom: "14px" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "14px", background: "var(--warning-dim)", border: "1px solid var(--border)", padding: "10px 14px", borderRadius: "6px", marginBottom: "14px" }}>
             Week {sessionPlan.week} · Day {sessionPlan.day} — saved without advancing programme position.
           </div>
         )}
@@ -2298,7 +2305,7 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
     return (
       <div>
         <div style={S.h1}>History</div>
-        <div style={{ color: "var(--text-dim)", fontSize: "13px", textAlign: "center", padding: "40px 0" }}>No sessions recorded yet.</div>
+        <div style={{ color: "var(--text-dim)", fontSize: "15px", textAlign: "center", padding: "40px 0" }}>No sessions recorded yet.</div>
       </div>
     );
   }
@@ -2316,11 +2323,11 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
             style={{ ...S.card, marginBottom: "8px", borderColor: session.id === highlightSession ? "var(--accent)" : "var(--border)" }}>
             <div style={{ ...S.cardHead, cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : session.id)}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "13px" }}>
+                <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "15px" }}>
                   {session.date}
                   <span style={{ color: "var(--text-muted)", fontWeight: "normal", marginLeft: "8px" }}>{name}</span>
                 </div>
-                <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "3px" }}>
+                <div style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: "3px" }}>
                   {session.week ? `Wk ${session.week} · Day ${session.day}` : ""}
                   {totals.sets > 0 ? `  ·  ${totals.sets} sets · ${Math.round(totals.kg)}${units}` : ""}
                   {session.duration_minutes ? `  ·  ${session.duration_minutes}min` : ""}
@@ -2336,13 +2343,13 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
                 ) : (
                   <button style={S.btnSm("danger")} onPointerDown={e => { e.stopPropagation(); setConfirmDel(session.id); setExpanded(null); }}>Del</button>
                 )}
-                <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>{isOpen ? "▲" : "▼"}</span>
+                <span style={{ color: "var(--text-dim)", fontSize: "15px" }}>{isOpen ? "▲" : "▼"}</span>
               </div>
             </div>
             {isOpen && (
               <div style={S.cardBody}>
                 {session.notes && (
-                  <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "12px", fontStyle: "italic", padding: "8px 12px", background: "var(--bg)", borderRadius: "5px" }}>
+                  <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "12px", fontStyle: "italic", padding: "8px 12px", background: "var(--bg)", borderRadius: "5px" }}>
                     "{session.notes}"
                   </div>
                 )}
@@ -2351,10 +2358,10 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
                   const workSets = ex.set_results?.filter(s => !s.is_warmup) || [];
                   return (
                     <div key={ei} style={{ marginBottom: "12px" }}>
-                      <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "6px", fontWeight: "600", letterSpacing: "0.04em" }}>{exInfo.name}</div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "6px", fontWeight: "600", letterSpacing: "0.04em" }}>{exInfo.name}</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
                         {workSets.map((s, si) => (
-                          <div key={si} style={{ background: s.success ? "var(--set-done-bg)" : "var(--danger-dim)", border: `1px solid ${s.success ? "var(--set-done-bdr)" : "var(--danger-dim)"}`, padding: "4px 9px", fontSize: "12px", borderRadius: "5px" }}>
+                          <div key={si} style={{ background: s.success ? "var(--set-done-bg)" : "var(--danger-dim)", border: `1px solid ${s.success ? "var(--set-done-bdr)" : "var(--danger-dim)"}`, padding: "4px 9px", fontSize: "14px", borderRadius: "5px" }}>
                             <span style={{ color: "var(--accent)" }}>{fmtW(s.weight_kg, units)}</span>
                             <span style={{ color: s.success ? "var(--success)" : "var(--danger)", marginLeft: "5px" }}>{s.reps_completed}×</span>
                             {s.rpe ? <span style={{ color: "var(--text-muted)", marginLeft: "4px" }}>@{s.rpe}</span> : null}
@@ -2539,7 +2546,7 @@ export default function App() {
   if (!authChecked || loading) {
     return (
       <div style={{ ...S.app, alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-        <div style={{ color: "var(--text-muted)", fontSize: "13px", letterSpacing: "0.1em" }}>LOADING...</div>
+        <div style={{ color: "var(--text-muted)", fontSize: "15px", letterSpacing: "0.1em" }}>LOADING...</div>
       </div>
     );
   }
