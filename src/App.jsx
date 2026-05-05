@@ -421,7 +421,7 @@ const S = {
 
 function Modal({ onClose, children }) {
   return (
-    <div style={S.overlay} onPointerDown={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={S.modalBox}>{children}</div>
     </div>
   );
@@ -1823,9 +1823,11 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     if (weightKg !== undefined) {
       const updates = {};
       const currentSetIsWarmup = ex.sets[setIdx].isWarmup;
-      if (!currentSetIsWarmup) {
+      // Only cascade weight to subsequent sets for assistance exercises (not main/supplemental
+      // which have prescribed per-set weights that should remain unchanged)
+      if (!currentSetIsWarmup && ex.role === "assistance") {
         ex.sets.forEach((s, i) => {
-          if (i >= setIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done)
+          if (i > setIdx && !s.isWarmup && !setResults[`${exIdx}-${i}`]?.done)
             updates[`${exIdx}-${i}`] = weightKg;
         });
       }
@@ -2338,7 +2340,10 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
   }, [highlightSession]);
 
   const sessions = [...(rootSchema.workout_sessions || [])]
-    .sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+    .sort((a, b) => {
+      if (b.date !== a.date) return b.date > a.date ? 1 : -1;
+      return (b.start_time || "").localeCompare(a.start_time || "");
+    });
 
   function instName(session) {
     const inst = rootSchema.programme_instances?.find(i => i.id === session.programme_instance_id);
