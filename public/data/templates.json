@@ -1,7 +1,7 @@
 [
     {
       "id": "531_fsl",
-      "name": "5/3/1 First Set Last",
+      "name": "5/3/1 - Anchor - FSL",
       "author": "Jim Wendler",
       "experience_level": ["intermediate", "advanced"],
       "days_per_week": 4,
@@ -81,7 +81,7 @@
     },
     {
       "id": "531_leviathan",
-      "name": "5/3/1 The Leviathan",
+      "name": "5/3/1 - Leader - The Leviathan",
       "author": "Jim Wendler",
       "experience_level": ["intermediate", "advanced"],
       "days_per_week": 4,
@@ -194,7 +194,7 @@
     },
     {
       "id": "531_anchor_351_fsl",
-      "name": "5/3/1 Anchor (3/5/1) + 3x5 FSL",
+      "name": "5/3/1 - Anchor - 3/5/1 + FSL",
       "author": "Jim Wendler",
       "experience_level": ["intermediate", "advanced"],
       "days_per_week": 4,

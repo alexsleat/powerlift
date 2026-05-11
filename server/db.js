@@ -109,13 +109,11 @@ db.exec(`
 `);
 
 function seedIfNeeded() {
-  const count = db.prepare('SELECT COUNT(*) as c FROM exercises').get().c;
-  if (count > 0) return;
-
   const exPath = path.join(__dirname, '..', 'public', 'data', 'exercise.json');
   const tmPath = path.join(__dirname, '..', 'public', 'data', 'templates.json');
 
-  if (fs.existsSync(exPath)) {
+  const count = db.prepare('SELECT COUNT(*) as c FROM exercises').get().c;
+  if (count === 0 && fs.existsSync(exPath)) {
     const exercises = JSON.parse(fs.readFileSync(exPath, 'utf8')).exercises || [];
     const insert = db.prepare('INSERT OR IGNORE INTO exercises (id, data) VALUES (?, ?)');
     db.transaction(() => { for (const ex of exercises) insert.run(ex.id, JSON.stringify(ex)); })();
@@ -124,9 +122,9 @@ function seedIfNeeded() {
 
   if (fs.existsSync(tmPath)) {
     const templates = JSON.parse(fs.readFileSync(tmPath, 'utf8'));
-    const insert = db.prepare('INSERT OR IGNORE INTO templates (id, data) VALUES (?, ?)');
-    db.transaction(() => { for (const t of templates) insert.run(t.id, JSON.stringify(t)); })();
-    console.log(`Seeded ${templates.length} templates`);
+    const upsert = db.prepare('INSERT OR REPLACE INTO templates (id, data) VALUES (?, ?)');
+    db.transaction(() => { for (const t of templates) upsert.run(t.id, JSON.stringify(t)); })();
+    console.log(`Upserted ${templates.length} templates`);
   }
 }
 

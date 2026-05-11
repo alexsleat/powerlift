@@ -1119,7 +1119,9 @@ function buildSessionPlan(inst, tmpl, rootSchema) {
     const role       = inst.current_cycle_role;
     const roleConfig = tmpl.cycle_roles?.[role];
     const isAmrap    = roleConfig?.amrap_sets ?? true;
-    const warmups    = calcWarmupSets(roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5), tmpl.warmup_protocol.start_weight_kg, tmpl.warmup_protocol.max_warmup_sets);
+    const warmupObjs = waveWeek.warmup_sets
+      ? waveWeek.warmup_sets.map(s => ({ weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps }))
+      : calcWarmupSets(roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5), tmpl.warmup_protocol?.start_weight_kg ?? 20, tmpl.warmup_protocol?.max_warmup_sets ?? 3);
     const mainSets   = waveWeek.core_sets.map((s, i) => {
       const w    = roundToNearest(s.tm_pct * tm, 2.5);
       const reps = s.reps === "amrap" && !isAmrap ? 5 : s.reps;
@@ -1127,12 +1129,17 @@ function buildSessionPlan(inst, tmpl, rootSchema) {
     });
     const exercises = [];
     exercises.push({ exercise_id: mainLift.exercise_id, role: "main",
-      sets: [...warmups.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...mainSets] });
-    if (roleConfig?.supplemental?.type === "FSL") {
-      const fslW = roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5);
+      sets: [...warmupObjs.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...mainSets] });
+    const fslConfig = waveWeek.fsl || (roleConfig?.supplemental?.type === "FSL" ? { sets: roleConfig.supplemental.sets, reps: roleConfig.supplemental.reps, tm_pct: waveWeek.core_sets[0].tm_pct } : null);
+    if (fslConfig) {
+      const fslW = roundToNearest(fslConfig.tm_pct * tm, 2.5);
       exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: "FSL Back-off",
-        sets: Array.from({ length: roleConfig.supplemental.sets }, (_, i) => ({ setIndex: i, weight: fslW, reps: roleConfig.supplemental.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+        sets: Array.from({ length: fslConfig.sets }, (_, i) => ({ setIndex: i, weight: fslW, reps: fslConfig.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
     }
+    (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
+      exercises.push({ exercise_id: a.exercise_id, role: "assistance",
+        sets: Array.from({ length: a.sets }, (_, i) => ({ setIndex: i, weight: 0, reps: a.reps ?? a.reps_is_seconds ?? 0, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
+    );
     return { exercises, week, day, weekLabel: waveWeek.week_label, role, mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
   }
 
