@@ -191,5 +191,121 @@
         "selection": "prescribed",
         "notes": "Assistance is prescribed per day. Select weight by RPE — no pre-calculated load."
       }
+    },
+    {
+      "id": "531_anchor_351_fsl",
+      "name": "5/3/1 Anchor (3/5/1) + 3x5 FSL",
+      "author": "Jim Wendler",
+      "experience_level": ["intermediate", "advanced"],
+      "days_per_week": 4,
+      "description": "3-week Anchor phase using 3/5/1 sequence. PR sets on Weeks 1 and 3. Week 2 is a volume buffer (no PR). Supplemental volume reduced to 3x5 FSL to dissipate fatigue. Refreshed assistance with added arm hypertrophy.",
+      "progression_model": {
+        "type": "training_max",
+        "initial_tm_percentage": 0.90,
+        "increment_trigger": "per_cycle",
+        "lift_increments": [
+          { "group": "upper_body", "exercises": ["ex_bench", "ex_ohp"], "increment_kg": 2.5 },
+          { "group": "lower_body", "exercises": ["ex_squat", "ex_deadlift"], "increment_kg": 5.0 }
+        ],
+        "failure_handling": { "manual_reset_allowed": true }
+      },
+      "phases": [{
+        "phase_id": "anchor_main",
+        "phase_number": 1,
+        "name": "Anchor Phase",
+        "typical_duration_weeks": 3,
+        "main_lifts": [
+          { "day": 1, "exercise_id": "ex_ohp" },
+          { "day": 2, "exercise_id": "ex_deadlift" },
+          { "day": 3, "exercise_id": "ex_bench" },
+          { "day": 4, "exercise_id": "ex_squat" }
+        ],
+        "wave_weeks": [
+          {
+            "week": 1,
+            "week_label": "Week 1 (3s Week + PR)",
+            "warmup_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 3 }
+            ],
+            "core_sets": [
+              { "tm_pct": 0.70, "reps": 3 },
+              { "tm_pct": 0.80, "reps": 3 },
+              { "tm_pct": 0.90, "reps": "amrap", "amrap_minimum": 3 }
+            ],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.70 }
+          },
+          {
+            "week": 2,
+            "week_label": "Week 2 (5s Week - No PR)",
+            "warmup_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 3 }
+            ],
+            "core_sets": [
+              { "tm_pct": 0.65, "reps": 5 },
+              { "tm_pct": 0.75, "reps": 5 },
+              { "tm_pct": 0.85, "reps": 5 }
+            ],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.65 }
+          },
+          {
+            "week": 3,
+            "week_label": "Week 3 (1s Week + PR)",
+            "warmup_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 3 }
+            ],
+            "core_sets": [
+              { "tm_pct": 0.75, "reps": 5 },
+              { "tm_pct": 0.85, "reps": 3 },
+              { "tm_pct": 0.95, "reps": "amrap", "amrap_minimum": 1 }
+            ],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.75 }
+          }
+        ],
+        "assistance_by_day": {
+          "1": [
+            { "exercise_id": "ex_single_arm_db_row", "sets": 3, "reps": 12 },
+            { "exercise_id": "ex_incline_db_press", "sets": 3, "reps": 12 },
+            { "exercise_id": "ex_hanging_leg_raise", "sets": 3, "reps": 15 },
+            { "exercise_id": "ex_cable_lateral_raise", "sets": 3, "reps": 15 },
+            { "exercise_id": "ex_db_hammer_curl", "sets": 3, "reps": 12 },
+            { "exercise_id": "ex_tricep_pushdown", "sets": 3, "reps": 12 }
+          ],
+          "2": [
+            { "exercise_id": "ex_pullup", "sets": 3, "reps": 10 },
+            { "exercise_id": "ex_seated_good_morning", "sets": 3, "reps": 12 },
+            { "exercise_id": "ex_plank", "sets": 3, "reps_is_seconds": 60 },
+            { "exercise_id": "ex_calf_raise", "sets": 3, "reps": 15 },
+            { "exercise_id": "ex_barbell_curl", "sets": 3, "reps": 10 },
+            { "exercise_id": "ex_overhead_tricep_ext", "sets": 3, "reps": 12 }
+          ],
+          "3": [
+            { "exercise_id": "ex_tbar_row", "sets": 3, "reps": 12 },
+            { "exercise_id": "ex_db_fly", "sets": 3, "reps": 15 },
+            { "exercise_id": "ex_face_pulls", "sets": 3, "reps": 20 },
+            { "exercise_id": "ex_russian_twist", "sets": 3, "reps": 20 },
+            { "exercise_id": "ex_preacher_curl", "sets": 3, "reps": 12 },
+            { "exercise_id": "ex_skullcrusher", "sets": 3, "reps": 10 }
+          ],
+          "4": [
+            { "exercise_id": "ex_bulgarian_split_squat", "sets": 3, "reps": 10 },
+            { "exercise_id": "ex_glute_ham_raise", "sets": 3, "reps": 10 },
+            { "exercise_id": "ex_cable_crunch", "sets": 3, "reps": 15 },
+            { "exercise_id": "ex_db_shrug", "sets": 3, "reps": 15 },
+            { "exercise_id": "ex_incline_db_curl", "sets": 3, "reps": 12 },
+            { "exercise_id": "ex_cable_kickback", "sets": 3, "reps": 12 }
+          ]
+        }
+      }],
+      "cycle_structure": {
+        "microcycle_days": 7,
+        "mesocycle_weeks": 3,
+        "deload_week": false
+      }
     }
   ]
