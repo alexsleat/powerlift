@@ -308,5 +308,142 @@
         "mesocycle_weeks": 3,
         "deload_week": false
       }
+    },
+    {
+      "id": "531_5spro_fsl_bb",
+      "name": "5/3/1 — 5s PRO + FSL (Bodybuilding & Posture)",
+      "author": "Jim Wendler",
+      "experience_level": ["intermediate", "advanced"],
+      "days_per_week": 4,
+      "description": "4-week leader block using 5s PRO (strict 5 reps, no AMRAP) with 5×5 FSL supplemental back-off sets. Bodybuilding-focused assistance chosen for hypertrophy and APT correction. Week 4 deload.",
+      "progression_model": {
+        "type": "training_max",
+        "initial_tm_percentage": 0.90,
+        "increment_trigger": "per_cycle",
+        "lift_increments": [
+          { "group": "upper_body", "exercises": ["ex_bench","ex_ohp"], "increment_kg": 2.5 },
+          { "group": "lower_body", "exercises": ["ex_squat","ex_deadlift"], "increment_kg": 5.0 }
+        ],
+        "failure_handling": { "manual_reset_allowed": true },
+        "deload_strategy": { "trigger": "scheduled", "position": "week_4" }
+      },
+      "phases": [{
+        "phase_id": "5spro_fsl_main",
+        "phase_number": 1,
+        "name": "Main Phase",
+        "typical_duration_weeks": 4,
+        "transition_rule": null,
+        "main_lifts": [
+          { "day": 1, "exercise_id": "ex_ohp" },
+          { "day": 2, "exercise_id": "ex_deadlift" },
+          { "day": 3, "exercise_id": "ex_bench" },
+          { "day": 4, "exercise_id": "ex_squat" }
+        ],
+        "wave_weeks": [
+          {
+            "week": 1,
+            "week_label": "Week 1 — 5s PRO",
+            "is_deload": false,
+            "warmup_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 5 }
+            ],
+            "core_sets": [
+              { "tm_pct": 0.65, "reps": 5 },
+              { "tm_pct": 0.75, "reps": 5 },
+              { "tm_pct": 0.85, "reps": 5 }
+            ],
+            "fsl": { "sets": 5, "reps": 5, "tm_pct": 0.65 }
+          },
+          {
+            "week": 2,
+            "week_label": "Week 2 — 5s PRO",
+            "is_deload": false,
+            "warmup_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 5 }
+            ],
+            "core_sets": [
+              { "tm_pct": 0.70, "reps": 5 },
+              { "tm_pct": 0.80, "reps": 5 },
+              { "tm_pct": 0.90, "reps": 5 }
+            ],
+            "fsl": { "sets": 5, "reps": 5, "tm_pct": 0.70 }
+          },
+          {
+            "week": 3,
+            "week_label": "Week 3 — 5s PRO",
+            "is_deload": false,
+            "warmup_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 5 }
+            ],
+            "core_sets": [
+              { "tm_pct": 0.75, "reps": 5 },
+              { "tm_pct": 0.85, "reps": 5 },
+              { "tm_pct": 0.95, "reps": 5 }
+            ],
+            "fsl": { "sets": 5, "reps": 5, "tm_pct": 0.75 }
+          },
+          {
+            "week": 4,
+            "week_label": "Week 4 — Deload",
+            "is_deload": true,
+            "deload_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 5 }
+            ]
+          }
+        ],
+        "assistance_by_day": {
+          "1": [
+            { "exercise_id": "ex_lat_pulldown",     "sets": 4, "reps": 15, "notes": "Strict control." },
+            { "exercise_id": "ex_cable_lateral_raise","sets": 4, "reps": 15, "notes": "Constant tension." },
+            { "exercise_id": "ex_db_bicep_curl",    "sets": 4, "reps": 12, "notes": "Supinate wrist at top." },
+            { "exercise_id": "ex_tricep_pushdown",  "sets": 4, "reps": 15, "notes": "Isolate elbow — no shoulder swing." },
+            { "exercise_id": "ex_hanging_leg_raise","sets": 4, "reps": 15, "notes": "Force posterior pelvic tilt before raising legs. Do not swing." }
+          ],
+          "2": [
+            { "exercise_id": "ex_bulgarian_split_squat","sets": 4, "reps": 12, "notes": "Per leg. Keep torso upright to deep-stretch the rear hip flexor." },
+            { "exercise_id": "ex_seated_cable_row", "sets": 4, "reps": 15, "notes": "Squeeze shoulder blades at peak." },
+            { "exercise_id": "ex_incline_db_press", "sets": 4, "reps": 12, "notes": "Deep stretch at bottom." },
+            { "exercise_id": "ex_db_hammer_curl",   "sets": 4, "reps": 15, "notes": "Pinned elbows." },
+            { "exercise_id": "ex_seated_calf_raise","sets": 4, "reps": 15, "notes": "2-second pause at full stretch." },
+            { "exercise_id": "ex_rkc_plank",        "sets": 3, "reps_is_seconds": 30, "notes": "Squeeze glutes and abs simultaneously at 100% effort to flatten lower back." }
+          ],
+          "3": [
+            { "exercise_id": "ex_pec_deck",              "sets": 4, "reps": 15, "notes": "Maximize stretch." },
+            { "exercise_id": "ex_face_pulls",            "sets": 4, "reps": 20, "notes": "Pull to bridge of nose." },
+            { "exercise_id": "ex_preacher_curl",         "sets": 4, "reps": 12, "notes": "Do not hyperextend at bottom." },
+            { "exercise_id": "ex_overhead_tricep_ext",   "sets": 4, "reps": 12, "notes": "Elbows track back." },
+            { "exercise_id": "ex_cable_crunch",          "sets": 4, "reps": 15, "notes": "Flex the spine — do not hinge at hips." },
+            { "exercise_id": "ex_deadbug",               "sets": 3, "reps": 10, "notes": "Per side. Lower back must remain entirely flush with the floor throughout." }
+          ],
+          "4": [
+            { "exercise_id": "ex_barbell_hip_thrust","sets": 4, "reps": 12, "notes": "Pause 1 second at top squeezing glutes." },
+            { "exercise_id": "ex_pullup",            "sets": 4, "reps": 10, "notes": "Full hang at bottom." },
+            { "exercise_id": "ex_db_seated_press",   "sets": 4, "reps": 12, "notes": "Stop at 90 degrees on descent." },
+            { "exercise_id": "ex_reverse_pec_deck",  "sets": 4, "reps": 15, "notes": "Sweep weight out wide." },
+            { "exercise_id": "ex_lying_leg_curl",    "sets": 4, "reps": 15, "notes": "Press hips hard into the pad to isolate hamstrings." },
+            { "exercise_id": "ex_calf_raise",        "sets": 4, "reps": 15, "notes": "Explosive concentric." },
+            { "exercise_id": "ex_kneeling_couch_stretch","sets": 2, "reps_is_seconds": 60, "notes": "Per leg. Squeeze the glute of the stretching leg to drive the hip forward." }
+          ]
+        }
+      }],
+      "warmup_protocol": { "type": "defined_in_phase", "start_weight_kg": 20.0 },
+      "cycle_structure": {
+        "microcycle_days": 7,
+        "mesocycle_weeks": 4,
+        "deload_week": true,
+        "macrocycle_description": "4-week leader block: W1–W3 5s PRO + 5×5 FSL, W4 Deload. TM increases each cycle."
+      },
+      "assistance": {
+        "selection": "prescribed",
+        "notes": "Assistance is prescribed per day with bodybuilding and APT-correction focus. Select weight by RPE."
+      }
     }
   ]
