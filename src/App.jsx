@@ -1352,7 +1352,7 @@ function LiftSetsPreview({ exId, tmKg, tmpl, units }) {
   if (ph.wave_weeks && ph.main_lifts) {
     const mainLift = ph.main_lifts.find(l => l.exercise_id === exId);
     if (!mainLift) return null;
-    rows = ph.wave_weeks.filter(ww => !ww.is_deload).map(ww => ({
+    rows = ph.wave_weeks.filter(ww => !ww.is_deload && ww.core_sets).map(ww => ({
       label: ww.week_label,
       sets: ww.core_sets.map(s => ({ reps: s.reps, weight: roundToNearest(s.tm_pct * tmKg, 2.5) }))
     }));
