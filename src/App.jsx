@@ -1118,28 +1118,33 @@ function buildSessionPlan(inst, tmpl, rootSchema) {
     const tm         = inst.training_maxes.find(t => t.exercise_id === mainLift.exercise_id)?.tm_kg || 100;
     const role       = inst.current_cycle_role;
     const roleConfig = tmpl.cycle_roles?.[role];
-    const isAmrap    = roleConfig?.amrap_sets ?? true;
-    const warmupObjs = waveWeek.warmup_sets
-      ? waveWeek.warmup_sets.map(s => ({ weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps }))
-      : calcWarmupSets(roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5), tmpl.warmup_protocol?.start_weight_kg ?? 20, tmpl.warmup_protocol?.max_warmup_sets ?? 3);
-    const mainSets   = waveWeek.core_sets.map((s, i) => {
-      const w    = roundToNearest(s.tm_pct * tm, 2.5);
-      const reps = s.reps === "amrap" && !isAmrap ? 5 : s.reps;
-      return { setIndex: i, weight: w, reps, isAmrap: s.reps === "amrap" && isAmrap, amrap_minimum: s.amrap_minimum, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null };
-    });
-    const exercises = [];
-    exercises.push({ exercise_id: mainLift.exercise_id, role: "main",
-      sets: [...warmupObjs.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...mainSets] });
-    const fslConfig = waveWeek.fsl || (roleConfig?.supplemental?.type === "FSL" ? { sets: roleConfig.supplemental.sets, reps: roleConfig.supplemental.reps, tm_pct: waveWeek.core_sets[0].tm_pct } : null);
-    if (fslConfig) {
-      const fslW = roundToNearest(fslConfig.tm_pct * tm, 2.5);
-      exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: "FSL Back-off",
-        sets: Array.from({ length: fslConfig.sets }, (_, i) => ({ setIndex: i, weight: fslW, reps: fslConfig.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+    const exercises  = [];
+    if (waveWeek.is_deload) {
+      exercises.push({ exercise_id: mainLift.exercise_id, role: "main", label: "Deload",
+        sets: waveWeek.deload_sets.map((s, i) => ({ setIndex: i, weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+    } else {
+      const isAmrap    = roleConfig?.amrap_sets ?? true;
+      const warmupObjs = waveWeek.warmup_sets
+        ? waveWeek.warmup_sets.map(s => ({ weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps }))
+        : calcWarmupSets(roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5), tmpl.warmup_protocol?.start_weight_kg ?? 20, tmpl.warmup_protocol?.max_warmup_sets ?? 3);
+      const mainSets   = waveWeek.core_sets.map((s, i) => {
+        const w    = roundToNearest(s.tm_pct * tm, 2.5);
+        const reps = s.reps === "amrap" && !isAmrap ? 5 : s.reps;
+        return { setIndex: i, weight: w, reps, isAmrap: s.reps === "amrap" && isAmrap, amrap_minimum: s.amrap_minimum, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null };
+      });
+      exercises.push({ exercise_id: mainLift.exercise_id, role: "main",
+        sets: [...warmupObjs.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...mainSets] });
+      const fslConfig = waveWeek.fsl || (roleConfig?.supplemental?.type === "FSL" ? { sets: roleConfig.supplemental.sets, reps: roleConfig.supplemental.reps, tm_pct: waveWeek.core_sets[0].tm_pct } : null);
+      if (fslConfig) {
+        const fslW = roundToNearest(fslConfig.tm_pct * tm, 2.5);
+        exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: "FSL Back-off",
+          sets: Array.from({ length: fslConfig.sets }, (_, i) => ({ setIndex: i, weight: fslW, reps: fslConfig.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+      }
+      (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
+        exercises.push({ exercise_id: a.exercise_id, role: "assistance",
+          sets: Array.from({ length: a.sets }, (_, i) => ({ setIndex: i, weight: 0, reps: a.reps ?? a.reps_is_seconds ?? 0, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
+      );
     }
-    (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
-      exercises.push({ exercise_id: a.exercise_id, role: "assistance",
-        sets: Array.from({ length: a.sets }, (_, i) => ({ setIndex: i, weight: 0, reps: a.reps ?? a.reps_is_seconds ?? 0, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
-    );
     return { exercises, week, day, weekLabel: waveWeek.week_label, role, mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
   }
 
@@ -1347,7 +1352,7 @@ function LiftSetsPreview({ exId, tmKg, tmpl, units }) {
   if (ph.wave_weeks && ph.main_lifts) {
     const mainLift = ph.main_lifts.find(l => l.exercise_id === exId);
     if (!mainLift) return null;
-    rows = ph.wave_weeks.map(ww => ({
+    rows = ph.wave_weeks.filter(ww => !ww.is_deload).map(ww => ({
       label: ww.week_label,
       sets: ww.core_sets.map(s => ({ reps: s.reps, weight: roundToNearest(s.tm_pct * tmKg, 2.5) }))
     }));
