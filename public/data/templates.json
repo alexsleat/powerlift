@@ -33,11 +33,12 @@
         "wave_weeks": [
           { "week": 1, "week_label": "5s Week", "core_sets": [{ "tm_pct": 0.65, "reps": 5 },{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": "amrap", "amrap_minimum": 5 }] },
           { "week": 2, "week_label": "3s Week", "core_sets": [{ "tm_pct": 0.70, "reps": 3 },{ "tm_pct": 0.80, "reps": 3 },{ "tm_pct": 0.90, "reps": "amrap", "amrap_minimum": 3 }] },
-          { "week": 3, "week_label": "1s Week", "core_sets": [{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": 3 },{ "tm_pct": 0.95, "reps": "amrap", "amrap_minimum": 1 }] }
+          { "week": 3, "week_label": "1s Week", "core_sets": [{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": 3 },{ "tm_pct": 0.95, "reps": "amrap", "amrap_minimum": 1 }] },
+          { "week": 4, "week_label": "Deload Week", "is_deload": true, "deload_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 5 }] }
         ]
       }],
       "warmup_protocol": { "type": "bar_to_working_weight", "start_weight_kg": 20.0, "max_warmup_sets": 3 },
-      "cycle_structure": { "microcycle_days": 7, "mesocycle_weeks": 3, "deload_week": false, "macrocycle_description": "2 leader cycles + 7th week + 1 anchor = one macrocycle." },
+      "cycle_structure": { "microcycle_days": 7, "mesocycle_weeks": 4, "deload_week": true, "macrocycle_description": "2 leader cycles + 7th week + 1 anchor = one macrocycle." },
       "assistance": { "categories": [{ "category": "push", "reps_leader": [25,50], "reps_anchor": [50,100] },{ "category": "pull", "reps_leader": [25,50], "reps_anchor": [50,100] },{ "category": "single_leg_core", "reps_leader": [25,50], "reps_anchor": [50,100] }], "selection": "user_choice" }
     },
     {
