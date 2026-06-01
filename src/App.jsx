@@ -964,6 +964,46 @@ function estimateCurrentE1rmFromSets(bestSets) {
   return sumWV / sumW;
 }
 
+// Per-exercise history for the run-tab history strip.
+// Returns { recentSessions (newest first, capped at n), buckets { heavy, moderate, light } }
+function getExerciseHistory(exerciseId, sessions, n, repRanges) {
+  const heavyMax = repRanges?.heavy_max    ?? 5;
+  const modMax   = repRanges?.moderate_max ?? 10;
+  const sorted   = [...(sessions || [])].sort((a, b) => (b.date > a.date ? 1 : -1));
+
+  const recentSessions = [];
+  const buckets = { heavy: null, moderate: null, light: null };
+
+  sorted.forEach(session => {
+    let sessionBest = null;
+    const sessionBuckets = { heavy: null, moderate: null, light: null };
+
+    (session.exercises_performed || []).forEach(ex => {
+      if (ex.exercise_id !== exerciseId) return;
+      (ex.set_results || []).forEach(s => {
+        if (s.is_warmup || !s.reps_completed || !s.weight_kg) return;
+        const r    = s.reps_completed;
+        const e1rm = epley(s.weight_kg, r);
+        const info = { weight_kg: s.weight_kg, reps: r, date: session.date, sessionId: session.id };
+
+        // Best per session by e1RM
+        if (!sessionBest || e1rm > epley(sessionBest.weight_kg, sessionBest.reps)) sessionBest = info;
+
+        // Best per rep-bucket within this session (highest weight at that range)
+        const bk = r <= heavyMax ? "heavy" : r <= modMax ? "moderate" : "light";
+        if (!sessionBuckets[bk] || s.weight_kg > sessionBuckets[bk].weight_kg) sessionBuckets[bk] = info;
+      });
+    });
+
+    if (sessionBest) recentSessions.push(sessionBest);
+    ["heavy", "moderate", "light"].forEach(k => {
+      if (!buckets[k] && sessionBuckets[k]) buckets[k] = sessionBuckets[k];
+    });
+  });
+
+  return { recentSessions: recentSessions.slice(0, n), buckets };
+}
+
 // Best set at exactly 10 reps for a given exercise across all sessions
 function getBest10rm(exerciseId, sessions) {
   let best = null;
@@ -1782,6 +1822,51 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
             ))}
           </SchemaSection>
 
+          <SchemaSection title="Workout History" defaultOpen={false}>
+            {(() => {
+              const histDefault = rootSchema.user_profile?.history_strip_default_open ?? false;
+              const histSessions = rootSchema.user_profile?.history_strip_sessions ?? 4;
+              const rr = rootSchema.user_profile?.rep_ranges || { heavy_max: 5, moderate_max: 10 };
+              return (
+                <>
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={S.label}>History strip default state</label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button style={S.btn(!histDefault ? "active" : "default")} onClick={() => updateProfile("history_strip_default_open", false)}>Collapsed</button>
+                      <button style={S.btn(histDefault  ? "active" : "default")} onClick={() => updateProfile("history_strip_default_open", true)}>Open</button>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={S.label}>Sessions to show</label>
+                    <input style={{ ...S.input, width: "100px" }} type="number" min="1" max="20" step="1"
+                      value={histSessions}
+                      onChange={e => updateProfile("history_strip_sessions", Math.max(1, parseInt(e.target.value) || 4))} />
+                  </div>
+                  <div>
+                    <label style={S.label}>Rep range boundaries</label>
+                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "6px" }}>
+                      <div>
+                        <label style={{ ...S.label, fontSize: "12px" }}>Heavy max (1–?)</label>
+                        <input style={{ ...S.input, width: "80px" }} type="number" min="1" max="20" step="1"
+                          value={rr.heavy_max}
+                          onChange={e => updateProfile("rep_ranges", { ...rr, heavy_max: Math.max(1, parseInt(e.target.value) || 5) })} />
+                      </div>
+                      <div>
+                        <label style={{ ...S.label, fontSize: "12px" }}>Moderate max (?–?)</label>
+                        <input style={{ ...S.input, width: "80px" }} type="number" min="2" max="50" step="1"
+                          value={rr.moderate_max}
+                          onChange={e => updateProfile("rep_ranges", { ...rr, moderate_max: Math.max(rr.heavy_max + 1, parseInt(e.target.value) || 10) })} />
+                      </div>
+                    </div>
+                    <div style={{ color: "var(--text-dim)", fontSize: "12px", marginTop: "6px" }}>
+                      Heavy 1–{rr.heavy_max} · Moderate {rr.heavy_max + 1}–{rr.moderate_max} · Light {rr.moderate_max + 1}+
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </SchemaSection>
+
           <SchemaSection title="Backup / Restore">
             <BackupRestore rootSchema={rootSchema} exLib={exLib} onRestore={onRestore} />
           </SchemaSection>
@@ -1865,11 +1950,98 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
   );
 }
 
+// ─── EXERCISE HISTORY STRIP ───────────────────────────────────────────────────
+
+function ExHistoryStrip({ exerciseId, role, sessions, units, n, repRanges, isOpen, onToggle, onNavigateToStats }) {
+  const hist      = getExerciseHistory(exerciseId, sessions, n, repRanges);
+  const isMain    = role === "main";
+  const hasStats  = !!LIFT_META[exerciseId];
+  const heavyMax  = repRanges?.heavy_max    ?? 5;
+  const modMax    = repRanges?.moderate_max ?? 10;
+
+  const noData = isMain
+    ? hist.recentSessions.length === 0
+    : !hist.buckets.heavy && !hist.buckets.moderate && !hist.buckets.light;
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--border)" }}>
+      {/* Toggle row */}
+      <div
+        onClick={onToggle}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 12px", cursor: "pointer", background: "var(--surface-2)", userSelect: "none" }}
+      >
+        <span style={{ color: "var(--text-dim)", fontSize: "11px", letterSpacing: "0.07em", textTransform: "uppercase" }}>History</span>
+        <span style={{ color: "var(--text-dim)", fontSize: "11px" }}>{isOpen ? "▴" : "▾"}</span>
+      </div>
+
+      {isOpen && (
+        <div style={{ background: "var(--surface-2)", padding: "6px 12px 10px" }}>
+          {noData ? (
+            <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>No history yet</div>
+          ) : isMain ? (
+            /* Main lift — last N sessions */
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+              {hist.recentSessions.map((s, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" }}>
+                  <span style={{ color: "var(--text-dim)", fontSize: "12px", flexShrink: 0 }}>{s.date}</span>
+                  <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--text)" }}>
+                    {fmtW(s.weight_kg, units)} × {s.reps}
+                  </span>
+                  <span style={{ color: "var(--text-dim)", fontSize: "11px", flexShrink: 0 }}>
+                    ≈ {fmtW(Math.round(epley(s.weight_kg, s.reps)), units)} 1RM
+                  </span>
+                </div>
+              ))}
+              {hasStats && (
+                <button
+                  style={{ alignSelf: "flex-start", background: "transparent", border: "none", color: "var(--accent)", fontSize: "12px", cursor: "pointer", padding: "4px 0 0", fontFamily: FONT }}
+                  onClick={e => { e.stopPropagation(); onNavigateToStats?.(); }}
+                >
+                  → Stats
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Accessory — heavy / moderate / light buckets */
+            <div style={{ display: "flex", gap: "6px" }}>
+              {[
+                { key: "heavy",    label: "Heavy",    range: `1–${heavyMax}` },
+                { key: "moderate", label: "Moderate", range: `${heavyMax + 1}–${modMax}` },
+                { key: "light",    label: "Light",    range: `${modMax + 1}+` },
+              ].map(({ key, label, range }) => {
+                const s = hist.buckets[key];
+                return (
+                  <div key={key} style={{ flex: "1 1 0", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "6px 8px", minWidth: 0 }}>
+                    <div style={{ color: "var(--text-dim)", fontSize: "10px", letterSpacing: "0.04em", marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {label} ({range})
+                    </div>
+                    {s ? (
+                      <>
+                        <div style={{ fontWeight: "700", fontSize: "13px", color: "var(--text)" }}>{fmtW(s.weight_kg, units)} × {s.reps}</div>
+                        <div style={{ color: "var(--text-dim)", fontSize: "11px" }}>{s.date.substring(5)}</div>
+                      </>
+                    ) : (
+                      <div style={{ color: "var(--text-dim)", fontSize: "12px" }}>—</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── SESSION RUNNER ───────────────────────────────────────────────────────────
 
-function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, onContextChange, editingSession, onEditDone }) {
-  const units    = rootSchema.user_profile?.units || "kg";
-  const restDefs = rootSchema.user_profile?.rest_defaults_seconds || DEFAULT_REST;
+function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, onContextChange, editingSession, onEditDone, onNavigateToStats }) {
+  const units           = rootSchema.user_profile?.units || "kg";
+  const restDefs        = rootSchema.user_profile?.rest_defaults_seconds || DEFAULT_REST;
+  const histDefaultOpen = rootSchema.user_profile?.history_strip_default_open ?? false;
+  const histN           = rootSchema.user_profile?.history_strip_sessions ?? 4;
+  const repRanges       = rootSchema.user_profile?.rep_ranges || { heavy_max: 5, moderate_max: 10 };
 
   const [phase,           setPhase]           = useState("pick");
   const [selectedInstId,  setSelectedInstId]  = useState(() => {
@@ -1879,6 +2051,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const [sessionPlan,     setSessionPlan]     = useState(null);
   const [currentExIdx,    setCurrentExIdx]    = useState(0);
   const [expandedSet,     setExpandedSet]     = useState(new Set([0]));
+  const [histOpenSet,     setHistOpenSet]     = useState(new Set());  // tracks which exIdx are explicitly toggled
   const [setResults,      setSetResults]      = useState({});
   const [weightOverrides, setWeightOverrides] = useState({});
   const [resting,         setResting]         = useState(false);
@@ -2059,6 +2232,12 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setExpandedSet(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; });
   }
 
+  // History strip: actual open state = default XOR explicitly toggled
+  function isHistOpen(idx) { return histOpenSet.has(idx) ? !histDefaultOpen : histDefaultOpen; }
+  function toggleHistOpen(idx) {
+    setHistOpenSet(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; });
+  }
+
   function getAssistanceWeightOverrides(plan) {
     const overrides = {};
     const sessions = rootSchema.workout_sessions || [];
@@ -2206,6 +2385,17 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
         </div>
         <div style={{ display: isExpanded ? "block" : "none" }}>
+          <ExHistoryStrip
+            exerciseId={ex.exercise_id}
+            role={ex.role}
+            sessions={rootSchema.workout_sessions || []}
+            units={units}
+            n={histN}
+            repRanges={repRanges}
+            isOpen={isHistOpen(exIdx)}
+            onToggle={() => toggleHistOpen(exIdx)}
+            onNavigateToStats={onNavigateToStats}
+          />
           <div style={{ padding: "10px" }}>
             {ex.sets.map((set, setIdx) => SetRow({ exIdx, setIdx, set }))}
           </div>
@@ -2850,6 +3040,7 @@ export default function App() {
               onContextChange={setSessionContext}
               editingSession={editingSession}
               onEditDone={() => { setEditingSession(null); setActiveTab("history"); }}
+              onNavigateToStats={() => setActiveTab("progress")}
             />
           </div>
 
