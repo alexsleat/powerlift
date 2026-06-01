@@ -4,6 +4,9 @@ import AuthPage from "./AuthPage.jsx";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 
+const MONO_FONT = "ui-monospace,'SFMono-Regular','SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
+const SANS_FONT = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+
 const DARK = {
   '--bg':              '#0d0d0d',
   '--surface':         '#171717',
@@ -25,11 +28,9 @@ const DARK = {
   '--set-warmup-bg':   '#0c1629',  '--set-warmup-bdr':  '#1a2a4a',
   '--set-next-bg':     '#231c00',  '--set-next-bdr':    '#5a4a18',
   '--set-idle-bg':     '#111111',  '--set-idle-bdr':    '#1e1e1e',
-  '--role-main-bg':    '#1a2a0f',
-  '--role-supp-bg':    '#0f1a2a',
-  '--role-asst-bg':    '#111124',
-  '--card-active-bdr': '#2a5a7a',
-  '--card-done-bdr':   '#2a4a2a',
+  '--role-main-bg':    '#1a2a0f',  '--role-supp-bg':    '#0f1a2a',  '--role-asst-bg': '#111124',
+  '--card-active-bdr': '#2a5a7a',  '--card-done-bdr':   '#2a4a2a',
+  '--font-app':        MONO_FONT,  '--radius-card':     '8px',  '--radius-btn': '6px',  '--shadow-card': 'none',
 };
 
 const LIGHT = {
@@ -53,11 +54,61 @@ const LIGHT = {
   '--set-warmup-bg':   '#eff6ff',  '--set-warmup-bdr':  '#bfdbfe',
   '--set-next-bg':     '#fffde7',  '--set-next-bdr':    '#fde68a',
   '--set-idle-bg':     '#ffffff',  '--set-idle-bdr':    '#e0e0e0',
-  '--role-main-bg':    '#f0fdf4',
-  '--role-supp-bg':    '#eff6ff',
-  '--role-asst-bg':    '#f5f3ff',
-  '--card-active-bdr': '#0891b2',
-  '--card-done-bdr':   '#16a34a',
+  '--role-main-bg':    '#f0fdf4',  '--role-supp-bg':    '#eff6ff',  '--role-asst-bg': '#f5f3ff',
+  '--card-active-bdr': '#0891b2',  '--card-done-bdr':   '#16a34a',
+  '--font-app':        MONO_FONT,  '--radius-card':     '8px',  '--radius-btn': '6px',  '--shadow-card': 'none',
+};
+
+const DARK_MODERN = {
+  '--bg':              '#0e0e11',
+  '--surface':         '#17171c',
+  '--surface-2':       '#1e1e26',
+  '--surface-3':       '#252530',
+  '--border':          '#2c2c3a',
+  '--text':            '#f0f0f6',
+  '--text-muted':      '#8a8aa8',
+  '--text-dim':        '#505068',
+  '--accent':          '#4da6ff',
+  '--accent-dim':      '#102040',
+  '--success':         '#34c170',
+  '--success-dim':     '#0c2a18',
+  '--danger':          '#e04848',
+  '--danger-dim':      '#360c0c',
+  '--warning':         '#e8a020',
+  '--warning-dim':     '#382008',
+  '--set-done-bg':     '#0c2a18',  '--set-done-bdr':    '#1a4828',
+  '--set-warmup-bg':   '#0c1828',  '--set-warmup-bdr':  '#182840',
+  '--set-next-bg':     '#281e04',  '--set-next-bdr':    '#504010',
+  '--set-idle-bg':     '#131318',  '--set-idle-bdr':    '#22222e',
+  '--role-main-bg':    '#0f2210',  '--role-supp-bg':    '#0e1824',  '--role-asst-bg': '#13131e',
+  '--card-active-bdr': '#2a4e7c',  '--card-done-bdr':   '#1e4424',
+  '--font-app':        SANS_FONT,  '--radius-card':     '16px',  '--radius-btn': '12px',  '--shadow-card': '0 2px 20px rgba(0,0,0,0.3)',
+};
+
+const LIGHT_MODERN = {
+  '--bg':              '#f4f4f8',
+  '--surface':         '#ffffff',
+  '--surface-2':       '#f0f0f6',
+  '--surface-3':       '#e8e8f2',
+  '--border':          '#dcdcec',
+  '--text':            '#16161e',
+  '--text-muted':      '#585870',
+  '--text-dim':        '#9898b8',
+  '--accent':          '#1a80e0',
+  '--accent-dim':      '#ddeeff',
+  '--success':         '#0f9c48',
+  '--success-dim':     '#dcf5e8',
+  '--danger':          '#c83030',
+  '--danger-dim':      '#fde0e0',
+  '--warning':         '#c07818',
+  '--warning-dim':     '#fef3d8',
+  '--set-done-bg':     '#f0fdf4',  '--set-done-bdr':    '#a8e8c0',
+  '--set-warmup-bg':   '#eef4ff',  '--set-warmup-bdr':  '#b8d4f8',
+  '--set-next-bg':     '#fffbea',  '--set-next-bdr':    '#f0d870',
+  '--set-idle-bg':     '#ffffff',  '--set-idle-bdr':    '#dcdcec',
+  '--role-main-bg':    '#edf8f2',  '--role-supp-bg':    '#eef4ff',  '--role-asst-bg': '#f4f0ff',
+  '--card-active-bdr': '#1a80e0',  '--card-done-bdr':   '#0f9c48',
+  '--font-app':        SANS_FONT,  '--radius-card':     '16px',  '--radius-btn': '12px',  '--shadow-card': '0 2px 12px rgba(0,0,0,0.08)',
 };
 
 function applyTheme(vars) {
@@ -65,12 +116,18 @@ function applyTheme(vars) {
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
 }
 
+function getThemeVars(isDark, skin) {
+  if (skin === "modern") return isDark ? DARK_MODERN : LIGHT_MODERN;
+  return isDark ? DARK : LIGHT;
+}
+
 // Apply initial theme immediately (prevents flash of wrong theme on load)
 {
-  const stored    = localStorage.getItem('pl-theme');
-  const sysDark   = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
-  const initDark  = stored === 'light' ? false : stored === 'dark' ? true : sysDark;
-  applyTheme(initDark ? DARK : LIGHT);
+  const stored     = localStorage.getItem('pl-theme');
+  const storedSkin = localStorage.getItem('pl-theme-skin') || 'classic';
+  const sysDark    = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+  const initDark   = stored === 'light' ? false : stored === 'dark' ? true : sysDark;
+  applyTheme(getThemeVars(initDark, storedSkin));
 }
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
@@ -171,7 +228,8 @@ const LIFT_META = {
 };
 const DEFAULT_REST = { main: 180, supplemental: 150, assistance: 90 };
 
-const FONT = "ui-monospace,'SFMono-Regular','SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
+const FONT = "var(--font-app)";
+const MONO_FONT_LITERAL = MONO_FONT; // for places that always need monospace (raw JSON editor)
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 
@@ -217,7 +275,7 @@ const S = {
     cursor: "pointer",
     fontFamily: FONT,
     fontSize: "14px",
-    borderRadius: "5px",
+    borderRadius: "var(--radius-btn)",
     minHeight: "32px",
     WebkitTapHighlightColor: "transparent",
     letterSpacing: "0.04em",
@@ -271,7 +329,8 @@ const S = {
   card: {
     background: "var(--surface)",
     border: "1px solid var(--border)",
-    borderRadius: "8px",
+    borderRadius: "var(--radius-card)",
+    boxShadow: "var(--shadow-card)",
     marginBottom: "12px",
     overflow: "hidden",
   },
@@ -323,7 +382,7 @@ const S = {
     width: "100%",
     boxSizing: "border-box",
     minHeight: "44px",
-    borderRadius: "6px",
+    borderRadius: "var(--radius-btn)",
     outline: "none",
   },
   textarea: {
@@ -337,7 +396,7 @@ const S = {
     boxSizing: "border-box",
     resize: "vertical",
     minHeight: "80px",
-    borderRadius: "6px",
+    borderRadius: "var(--radius-btn)",
     outline: "none",
   },
   select: {
@@ -348,7 +407,7 @@ const S = {
     fontSize: "16px",
     fontFamily: FONT,
     minHeight: "44px",
-    borderRadius: "6px",
+    borderRadius: "var(--radius-btn)",
     outline: "none",
   },
 
@@ -371,7 +430,7 @@ const S = {
       fontFamily: FONT,
       letterSpacing: "0.04em",
       minHeight: "44px",
-      borderRadius: "6px",
+      borderRadius: "var(--radius-btn)",
       WebkitTapHighlightColor: "transparent",
       fontWeight: "600",
       touchAction: "manipulation",
@@ -394,7 +453,7 @@ const S = {
       fontSize: "14px",
       fontFamily: FONT,
       letterSpacing: "0.04em",
-      borderRadius: "5px",
+      borderRadius: "var(--radius-btn)",
       WebkitTapHighlightColor: "transparent",
       minHeight: "32px",
       touchAction: "manipulation",
@@ -544,7 +603,7 @@ function JsonViewer({ data, onSave }) {
         <button style={S.btn()} onClick={() => setRaw(JSON.stringify(data, null, 2))}>Reset</button>
         {error && <span style={{ color: "var(--danger)", fontSize: "14px" }}>Error: {error}</span>}
       </div>
-      <textarea style={{ ...S.textarea, minHeight: "500px", color: "var(--accent)", fontSize: "13px" }}
+      <textarea style={{ ...S.textarea, minHeight: "500px", color: "var(--accent)", fontSize: "13px", fontFamily: MONO_FONT_LITERAL }}
         value={raw} onChange={e => setRaw(e.target.value)} />
     </div>
   );
@@ -1727,7 +1786,7 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
 
 // ─── SETTINGS TAB (replaces RootSchemaView + ExerciseLibraryView) ──────────────
 
-function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, themeOverride, onSetTheme }) {
+function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, themeOverride, onSetTheme, themeSkin, onSetThemeSkin }) {
   const [sub,         setSub]         = useState("setup");
   const [editTmModal, setEditTmModal] = useState(null);
   const units    = rootSchema.user_profile?.units || "kg";
@@ -1782,11 +1841,20 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
       {sub === "setup" && (
         <>
           <SchemaSection title="Appearance">
-            <div style={{ marginBottom: "4px", ...S.label }}>Theme</div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button style={S.btn(!themeOverride ? "active" : "default")} onClick={() => onSetTheme(null)}>Auto (system)</button>
-              <button style={S.btn(themeOverride === "light" ? "active" : "default")} onClick={() => onSetTheme("light")}>Light</button>
-              <button style={S.btn(themeOverride === "dark"  ? "active" : "default")} onClick={() => onSetTheme("dark")}>Dark</button>
+            <div style={{ marginBottom: "14px" }}>
+              <div style={{ ...S.label, marginBottom: "8px" }}>Style</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button style={S.btn(themeSkin === "classic" ? "active" : "default")} onClick={() => onSetThemeSkin("classic")}>Classic Nerd</button>
+                <button style={S.btn(themeSkin === "modern"  ? "active" : "default")} onClick={() => onSetThemeSkin("modern")}>Modern</button>
+              </div>
+            </div>
+            <div>
+              <div style={{ ...S.label, marginBottom: "8px" }}>Mode</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button style={S.btn(!themeOverride ? "active" : "default")} onClick={() => onSetTheme(null)}>Auto (system)</button>
+                <button style={S.btn(themeOverride === "light" ? "active" : "default")} onClick={() => onSetTheme("light")}>Light</button>
+                <button style={S.btn(themeOverride === "dark"  ? "active" : "default")} onClick={() => onSetTheme("dark")}>Dark</button>
+              </div>
             </div>
           </SchemaSection>
 
@@ -2042,6 +2110,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const histDefaultOpen = rootSchema.user_profile?.history_strip_default_open ?? false;
   const histN           = rootSchema.user_profile?.history_strip_sessions ?? 4;
   const repRanges       = rootSchema.user_profile?.rep_ranges || { heavy_max: 5, moderate_max: 10 };
+  const isModern        = (rootSchema.user_profile?.theme || 'classic') === 'modern';
 
   const [phase,           setPhase]           = useState("pick");
   const [selectedInstId,  setSelectedInstId]  = useState(() => {
@@ -2052,6 +2121,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const [currentExIdx,    setCurrentExIdx]    = useState(0);
   const [expandedSet,     setExpandedSet]     = useState(new Set([0]));
   const [histOpenSet,     setHistOpenSet]     = useState(new Set());  // tracks which exIdx are explicitly toggled
+  const [viewExIdx,       setViewExIdx]       = useState(0);           // Modern theme: which exercise card is shown
+  const [showExOverlay,   setShowExOverlay]   = useState(false);       // Modern theme: session overview overlay
   const [setResults,      setSetResults]      = useState({});
   const [weightOverrides, setWeightOverrides] = useState({});
   const [resting,         setResting]         = useState(false);
@@ -2092,6 +2163,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     sessionStartTsRef.current = draft.sessionStartTs || Date.now();
     setResting(false);
     setDraftOffer(null);
+    setViewExIdx(draft.currentExIdx || 0);
+    setShowExOverlay(false);
     setPhase("session");
   }
 
@@ -2146,6 +2219,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setSessionDurationMins(editingSession.duration_minutes || null);
     setResting(false);
     sessionStartTsRef.current = Date.now();
+    setViewExIdx(0);
+    setShowExOverlay(false);
     setPhase("session");
   }, [editingSession]);
 
@@ -2273,6 +2348,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setSessionTime(now.toTimeString().slice(0, 5));
     setSessionDurationMins(null);
     sessionStartTsRef.current = Date.now();
+    setViewExIdx(0);
+    setShowExOverlay(false);
     setPhase("session");
   }
 
@@ -2287,7 +2364,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const setNum       = set.isWarmup ? "W" : (setIdx - numWarmup + 1);
     const weight       = getEffectiveWeight(exIdx, setIdx, set);
     const hint         = done ? getRpeHint(result.rpe, exEntry.role) : null;
-    const isNext = !done && exIdx === currentExIdx &&
+    const activeExIdx = isModern ? viewExIdx : currentExIdx;
+    const isNext = !done && exIdx === activeExIdx &&
       exSets.slice(0, setIdx).filter(s => !s.isWarmup).every((_, j) => {
         const wc = numWarmup;
         return setResults[`${exIdx}-${wc + j}`]?.done;
@@ -2347,6 +2425,199 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
         )}
       </>
+    );
+  }
+
+  // ── Render: Session Overview Overlay (Modern) ───────────────────────────────
+  function SessionOverviewOverlay() {
+    return (
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end" }}
+        onClick={() => setShowExOverlay(false)}
+      >
+        <div
+          style={{ background: "var(--surface)", borderRadius: "var(--radius-card) var(--radius-card) 0 0", width: "100%", maxHeight: "82vh", overflowY: "auto", padding: "20px 16px 32px", boxShadow: "0 -8px 32px rgba(0,0,0,0.35)" }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{ width: "40px", height: "4px", background: "var(--border)", borderRadius: "2px", margin: "0 auto 20px" }} />
+          <div style={{ fontWeight: "700", fontSize: "18px", marginBottom: "16px" }}>{sessionPlan.weekLabel}</div>
+
+          {sessionPlan.exercises.map((exItem, i) => {
+            const exInfo   = getExercise(exItem.exercise_id, rootSchema, exLib);
+            const wc       = exItem.sets.filter(s => s.isWarmup).length;
+            const workSets = exItem.sets.filter(s => !s.isWarmup);
+            const doneCnt  = workSets.filter((_, j) => setResults[`${i}-${wc + j}`]?.done).length;
+            const isDone   = doneCnt === workSets.length && workSets.length > 0;
+            const isCur    = i === viewExIdx;
+            const rColor   = exItem.role === "main" ? "var(--role-main-bg)" : exItem.role === "supplemental" ? "var(--role-supp-bg)" : "var(--role-asst-bg)";
+            const rLabel   = exItem.role === "main" ? "MAIN" : exItem.role === "supplemental" ? "SUPP" : "ASST";
+
+            return (
+              <button key={i}
+                onClick={() => { setViewExIdx(i); setShowExOverlay(false); }}
+                style={{ display: "block", width: "100%", textAlign: "left", background: isCur ? "var(--accent-dim)" : isDone ? "var(--success-dim)" : "var(--surface-2)", border: `1px solid ${isCur ? "var(--card-active-bdr)" : isDone ? "var(--card-done-bdr)" : "var(--border)"}`, borderRadius: "var(--radius-btn)", padding: "12px 14px", marginBottom: "8px", cursor: "pointer", fontFamily: FONT }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  {isDone && <span style={{ color: "var(--success)" }}>✓</span>}
+                  {isCur && !isDone && <span style={{ color: "var(--accent)" }}>▶</span>}
+                  <span style={S.badge(rColor)}>{rLabel}</span>
+                  <span style={{ fontWeight: "700", fontSize: "16px", color: isDone ? "var(--success)" : isCur ? "var(--accent)" : "var(--text)" }}>{exInfo.name}</span>
+                  <span style={{ marginLeft: "auto", color: "var(--text-dim)", fontSize: "13px" }}>{doneCnt}/{workSets.length}</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                  {workSets.map((set, si) => {
+                    const res = setResults[`${i}-${wc + si}`];
+                    const w   = weightOverrides[`${i}-${wc + si}`] ?? weightOverrides[`${i}-all`] ?? set.weight;
+                    const wTxt = w > 0 ? fmtW(w, units) : "—";
+                    const rTxt = res?.done ? `${res.reps}` : set.reps === "amrap" ? "AMRAP" : `${set.reps}`;
+                    return (
+                      <span key={si} style={{ fontSize: "12px", padding: "3px 8px", borderRadius: "4px", background: res?.done ? "var(--set-done-bg)" : "var(--set-idle-bg)", border: `1px solid ${res?.done ? "var(--set-done-bdr)" : "var(--set-idle-bdr)"}`, color: res?.done ? "var(--success)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
+                        {wTxt}×{rTxt}
+                      </span>
+                    );
+                  })}
+                </div>
+              </button>
+            );
+          })}
+
+          <button style={{ ...S.btn("ghost"), width: "100%", marginTop: "4px" }} onClick={() => setShowExOverlay(false)}>Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: ModernSessionPhase ───────────────────────────────────────────────
+  function ModernSessionPhase() {
+    const totalEx  = sessionPlan.exercises.length;
+    const ex       = sessionPlan.exercises[viewExIdx];
+    const exInfo   = getExercise(ex.exercise_id, rootSchema, exLib);
+    const warmups  = ex.sets.filter(s => s.isWarmup);
+    const workSets = ex.sets.filter(s => !s.isWarmup);
+    const doneCnt  = workSets.filter((_, i) => setResults[`${viewExIdx}-${warmups.length + i}`]?.done).length;
+    const allDone  = workSets.length > 0 && doneCnt === workSets.length;
+
+    const doneExCnt = sessionPlan.exercises.filter((exItem, i) => {
+      const wc = exItem.sets.filter(s => s.isWarmup).length;
+      return exItem.sets.filter(s => !s.isWarmup).every((_, j) => setResults[`${i}-${wc + j}`]?.done);
+    }).length;
+    const allExDone = doneExCnt === totalEx;
+
+    const prevEx   = viewExIdx > 0 ? sessionPlan.exercises[viewExIdx - 1] : null;
+    const nextEx   = viewExIdx < totalEx - 1 ? sessionPlan.exercises[viewExIdx + 1] : null;
+    const prevName = prevEx ? getExercise(prevEx.exercise_id, rootSchema, exLib).name : null;
+    const nextName = nextEx ? getExercise(nextEx.exercise_id, rootSchema, exLib).name : null;
+    const rColor   = ex.role === "main" ? "var(--role-main-bg)" : ex.role === "supplemental" ? "var(--role-supp-bg)" : "var(--role-asst-bg)";
+    const rLabel   = ex.role === "main" ? "MAIN" : ex.role === "supplemental" ? "SUPP" : "ASST";
+
+    const logModalData    = logModal    ? sessionPlan.exercises[logModal.exIdx]?.sets[logModal.setIdx]    : null;
+    const weightModalData = weightModal ? sessionPlan.exercises[weightModal.exIdx]?.sets[weightModal.setIdx] : null;
+
+    return (
+      <div>
+        {/* Modals */}
+        {logModal && logModalData && (
+          <LogSetModal
+            set={{ ...logModalData, weight: logModal.editWeight ?? getEffectiveWeight(logModal.exIdx, logModal.setIdx, logModalData) }}
+            setLabel={`${getExercise(sessionPlan.exercises[logModal.exIdx].exercise_id, rootSchema, exLib).name} — Set ${logModal.setIdx + 1}`}
+            onConfirm={(reps, rpe, weightKg) => logSet(logModal.exIdx, logModal.setIdx, reps, rpe, weightKg)}
+            onClose={() => setLogModal(null)} units={units}
+            defaultRpe={logModal.editRpe ?? lastRpeByExId[sessionPlan.exercises[logModal.exIdx]?.exercise_id]}
+            defaultReps={logModal.editReps} isEdit={!!logModal.editReps}
+          />
+        )}
+        {weightModal && weightModalData && (
+          <EditWeightModal weight={weightModal.weight} units={units}
+            onClose={() => setWeightModal(null)}
+            onConfirm={(kg, applyAll) => applyWeightOverride(weightModal.exIdx, weightModal.setIdx, kg, applyAll)}
+          />
+        )}
+        {showExOverlay && SessionOverviewOverlay()}
+
+        {/* Session header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: "700" }}>{sessionPlan.weekLabel}</div>
+            <div style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "2px" }}>Day {sessionPlan.day}</div>
+          </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button style={S.btnSm("warning")} onClick={() => { setPhase("summary"); setResting(false); }}>Save</button>
+            <button style={S.btnSm("danger")}  onClick={() => { clearDraft(); setPhase("pick"); setResting(false); }}>Abandon</button>
+          </div>
+        </div>
+
+        {/* Progress pill dots */}
+        <div style={{ display: "flex", gap: "5px", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+          {sessionPlan.exercises.map((exItem, i) => {
+            const wc   = exItem.sets.filter(s => s.isWarmup).length;
+            const ws   = exItem.sets.filter(s => !s.isWarmup);
+            const done = ws.every((_, j) => setResults[`${i}-${wc + j}`]?.done) && ws.length > 0;
+            const cur  = i === viewExIdx;
+            return (
+              <button key={i} onClick={() => setViewExIdx(i)}
+                style={{ width: cur ? "24px" : "8px", height: "8px", borderRadius: "4px", background: done ? "var(--success)" : cur ? "var(--accent)" : "var(--border)", border: "none", cursor: "pointer", padding: 0, flexShrink: 0, transition: "width 0.2s, background 0.2s" }}
+              />
+            );
+          })}
+          <span style={{ color: "var(--text-dim)", fontSize: "12px", marginLeft: "4px" }}>{doneExCnt}/{totalEx}</span>
+        </div>
+
+        {resting && <RestTimer key={restKey} seconds={restSeconds} onDone={() => setResting(false)} />}
+
+        {/* Exercise card */}
+        <div style={{ background: "var(--surface)", border: `2px solid ${allDone ? "var(--card-done-bdr)" : "var(--card-active-bdr)"}`, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-card)", overflow: "hidden", marginBottom: "14px" }}>
+          <div style={{ padding: "16px 16px 12px", background: allDone ? "var(--success-dim)" : "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={S.badge(rColor)}>{rLabel}</span>
+              <span style={{ fontWeight: "700", fontSize: "20px", color: allDone ? "var(--success)" : "var(--text)" }}>{exInfo.name}</span>
+              {allDone && <span style={{ color: "var(--success)", fontSize: "18px", marginLeft: "auto" }}>✓</span>}
+            </div>
+            <div style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: "4px" }}>{doneCnt}/{workSets.length} sets done</div>
+          </div>
+          <div style={{ padding: "12px" }}>
+            {ex.sets.map((set, setIdx) => SetRow({ exIdx: viewExIdx, setIdx, set }))}
+          </div>
+          <ExHistoryStrip
+            exerciseId={ex.exercise_id} role={ex.role}
+            sessions={rootSchema.workout_sessions || []} units={units}
+            n={histN} repRanges={repRanges}
+            isOpen={isHistOpen(viewExIdx)} onToggle={() => toggleHistOpen(viewExIdx)}
+            onNavigateToStats={onNavigateToStats}
+          />
+        </div>
+
+        {/* Prev / Next navigation */}
+        <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+          <button style={{ ...S.btn(prevEx ? "default" : "ghost"), flex: 1, fontSize: "14px", opacity: prevEx ? 1 : 0.3 }}
+            disabled={!prevEx} onClick={() => setViewExIdx(v => v - 1)}>
+            ◀ {prevName || "—"}
+          </button>
+          <button style={{ ...S.btn(nextEx ? "default" : "ghost"), flex: 1, fontSize: "14px", opacity: nextEx ? 1 : 0.3 }}
+            disabled={!nextEx} onClick={() => setViewExIdx(v => v + 1)}>
+            {nextName || "—"} ▶
+          </button>
+        </div>
+
+        {/* All Done / Finish */}
+        {allDone && (
+          allExDone
+            ? <button style={{ ...S.btn("success"), width: "100%", fontSize: "16px", padding: "14px", marginBottom: "8px" }}
+                onClick={() => { setPhase("summary"); setResting(false); }}>
+                Finish Session ✓
+              </button>
+            : nextEx
+              ? <button style={{ ...S.btn("success"), width: "100%", fontSize: "16px", padding: "14px", marginBottom: "8px" }}
+                  onClick={() => setViewExIdx(v => v + 1)}>
+                  All Done · {nextName} ▶
+                </button>
+              : null
+        )}
+
+        {/* Session overview */}
+        <button style={{ ...S.btn("ghost"), width: "100%", fontSize: "14px" }} onClick={() => setShowExOverlay(true)}>
+          ≡ Session overview
+        </button>
+      </div>
     );
   }
 
@@ -2438,6 +2709,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
         setSessionTime(nowOvr.toTimeString().slice(0, 5));
         setSessionDurationMins(null);
         sessionStartTsRef.current = Date.now();
+        setViewExIdx(0);
+        setShowExOverlay(false);
         setPhase("session");
       } else {
         startSession();
@@ -2592,8 +2865,8 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const logModalData    = logModal    ? sessionPlan.exercises[logModal.exIdx]?.sets[logModal.setIdx] : null;
     const weightModalData = weightModal ? sessionPlan.exercises[weightModal.exIdx]?.sets[weightModal.setIdx] : null;
 
-    return (
-      <div>
+    const modals = (
+      <>
         {logModal && logModalData && (
           <LogSetModal
             set={{ ...logModalData, weight: logModal.editWeight ?? getEffectiveWeight(logModal.exIdx, logModal.setIdx, logModalData) }}
@@ -2613,6 +2886,16 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             onConfirm={(kg, applyAll) => applyWeightOverride(weightModal.exIdx, weightModal.setIdx, kg, applyAll)}
           />
         )}
+      </>
+    );
+
+    if (isModern) {
+      return ModernSessionPhase();
+    }
+
+    return (
+      <div>
+        {modals}
 
         {/* Session header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "14px", gap: "8px" }}>
@@ -2839,16 +3122,28 @@ export default function App() {
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   const [themeOverride, setThemeOverride] = useState(() => localStorage.getItem('pl-theme'));
+  const [themeSkin,     setThemeSkin]     = useState(() => localStorage.getItem('pl-theme-skin') || 'classic');
   const sysDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
   const isDark  = themeOverride ? themeOverride === 'dark' : sysDark;
 
   useEffect(() => {
-    applyTheme(isDark ? DARK : LIGHT);
+    applyTheme(getThemeVars(isDark, themeSkin));
     if (themeOverride) localStorage.setItem('pl-theme', themeOverride);
     else               localStorage.removeItem('pl-theme');
-  }, [isDark, themeOverride]);
+    localStorage.setItem('pl-theme-skin', themeSkin);
+  }, [isDark, themeOverride, themeSkin]);
+
+  // Sync skin from user_profile once data is loaded
+  useEffect(() => {
+    const profileSkin = rootSchema?.user_profile?.theme;
+    if (profileSkin && profileSkin !== themeSkin) setThemeSkin(profileSkin);
+  }, [rootSchema?.user_profile?.theme]); // eslint-disable-line
 
   function handleSetTheme(val) { setThemeOverride(val); }
+  function handleSetThemeSkin(skin) {
+    setThemeSkin(skin);
+    if (rootSchema) updateSchema({ ...rootSchema, user_profile: { ...rootSchema.user_profile, theme: skin } });
+  }
 
   // ── Auth + data load ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -3052,6 +3347,7 @@ export default function App() {
               rootSchema={rootSchema} exLib={exLib}
               onChange={updateSchema} onExLibChange={updateExLib} onRestore={handleRestore}
               themeOverride={themeOverride} isDark={isDark} onSetTheme={handleSetTheme}
+              themeSkin={themeSkin} onSetThemeSkin={handleSetThemeSkin}
             />
           )}
         </div>
