@@ -598,35 +598,76 @@ function RestTimer({ seconds, onDone }) {
 
 // ─── SVG CHARTS ───────────────────────────────────────────────────────────────
 
-// Full-width line chart with optional current-estimate dashed line and clickable dots
-function LineChartWithCurrent({ points, color, currentEstimate, onDotClick }) {
-  if (!points || points.length < 2) return null;
-  const W = 400, H = 110, PAD = { t: 12, b: 20, l: 40, r: 12 };
-  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
+// Smooth cubic bezier path through points using Catmull-Rom -> Bezier conversion
+function smoothSvgPath(pts) {
+  if (pts.length < 2) return "";
+  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(i - 1, 0)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(i + 2, pts.length - 1)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
 
-  // Include currentEstimate in the Y range so it never clips
-  const ys   = points.map(p => p.y);
-  const allY = currentEstimate != null ? [...ys, currentEstimate] : ys;
+// Full-width line chart: actual weight (primary) + optional e1RM overlay + toggleable current estimate
+function LineChartWithCurrent({ points, color, showE1rm, currentEstimate, onDotClick, uid }) {
+  if (!points || points.length < 2) return null;
+  const W = 400, H = 140, PAD = { t: 16, b: 26, l: 46, r: 18 };
+  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
+  const clipId = `clip_${uid}`, gradId = `grad_${uid}`;
+
+  const weightVals = points.map(p => p.y);
+  const e1rmVals   = showE1rm ? points.map(p => p.e1rm) : [];
+  const allY = [
+    ...weightVals,
+    ...e1rmVals,
+    ...(showE1rm && currentEstimate != null ? [currentEstimate] : []),
+  ];
   const minY = Math.min(...allY), maxY = Math.max(...allY);
   const rangeY = maxY - minY || 1;
-  // 5% padding on the range so dots at extremes aren't clipped
-  const lo = minY - rangeY * 0.05, hi = maxY + rangeY * 0.05;
+  const lo = minY - rangeY * 0.10, hi = maxY + rangeY * 0.10;
   const span = hi - lo;
 
-  const tx = i  => PAD.l + (i / (points.length - 1)) * cW;
-  const ty = v  => PAD.t + (1 - (v - lo) / span) * cH;
-  const d  = points.map((p, i) => `${i === 0 ? "M" : "L"} ${tx(i).toFixed(1)} ${ty(p.y).toFixed(1)}`).join(" ");
+  const tx = i => PAD.l + (i / (points.length - 1)) * cW;
+  const ty = v => PAD.t + (1 - (v - lo) / span) * cH;
 
-  // Y-axis grid lines (3 levels)
+  const svgPts     = points.map((p, i) => ({ x: tx(i), y: ty(p.y) }));
+  const svgE1rmPts = showE1rm ? points.map((p, i) => ({ x: tx(i), y: ty(p.e1rm) })) : [];
+
+  const mainPath  = smoothSvgPath(svgPts);
+  const e1rmPath  = showE1rm ? smoothSvgPath(svgE1rmPts) : "";
+  const areaPath  = mainPath
+    + ` L ${tx(points.length - 1).toFixed(1)},${(H - PAD.b).toFixed(1)}`
+    + ` L ${PAD.l.toFixed(1)},${(H - PAD.b).toFixed(1)} Z`;
+
   const gridVals = [lo + span * 0.25, lo + span * 0.5, lo + span * 0.75].map(v => Math.round(v));
+  const col = color || "var(--accent)";
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={col} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={col} stopOpacity="0.02" />
+        </linearGradient>
+        <clipPath id={clipId}>
+          <rect x={PAD.l} y={PAD.t - 4} width={cW} height={cH + 8} />
+        </clipPath>
+      </defs>
+
       {/* Grid lines */}
       {gridVals.map((v, i) => (
         <g key={i}>
-          <line x1={PAD.l} y1={ty(v)} x2={W - PAD.r} y2={ty(v)} stroke="var(--border)" strokeWidth="0.5" strokeDasharray="2,3" />
-          <text x={PAD.l - 4} y={ty(v) + 3} fill="var(--text-dim)" fontSize="7" textAnchor="end">{v}</text>
+          <line x1={PAD.l} y1={ty(v)} x2={W - PAD.r} y2={ty(v)}
+            stroke="var(--border)" strokeWidth="0.6" strokeDasharray="3,4" />
+          <text x={PAD.l - 5} y={ty(v) + 3.5} fill="var(--text-dim)" fontSize="8" textAnchor="end">{v}</text>
         </g>
       ))}
 
@@ -634,38 +675,111 @@ function LineChartWithCurrent({ points, color, currentEstimate, onDotClick }) {
       <line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b} stroke="var(--border)" strokeWidth="1" />
       <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b} stroke="var(--border)" strokeWidth="1" />
 
-      {/* Current estimate dashed line */}
-      {currentEstimate != null && (
+      {/* Gradient area fill */}
+      <path d={areaPath} fill={`url(#${gradId})`} clipPath={`url(#${clipId})`} />
+
+      {/* e1RM overlay line */}
+      {showE1rm && e1rmPath && (
         <>
-          <line
-            x1={PAD.l} y1={ty(currentEstimate)}
-            x2={W - PAD.r} y2={ty(currentEstimate)}
-            stroke="var(--warning)" strokeWidth="1.2" strokeDasharray="4,3" opacity="0.7"
-          />
-          <text x={W - PAD.r + 2} y={ty(currentEstimate) + 3} fill="var(--warning)" fontSize="7" textAnchor="start">now</text>
+          <path d={e1rmPath} fill="none" stroke={col} strokeWidth="1.8"
+            strokeDasharray="5,3" strokeOpacity="0.55" clipPath={`url(#${clipId})`} />
+          {svgE1rmPts.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={col} opacity="0.45" />
+          ))}
         </>
       )}
 
-      {/* Historical line */}
-      <path d={d} fill="none" stroke={color || "var(--accent)"} strokeWidth="2" strokeLinejoin="round" />
+      {/* Current estimate dashed line (only when e1RM overlay is on) */}
+      {showE1rm && currentEstimate != null && (
+        <>
+          <line x1={PAD.l} y1={ty(currentEstimate)} x2={W - PAD.r} y2={ty(currentEstimate)}
+            stroke="var(--warning)" strokeWidth="1.2" strokeDasharray="4,3" opacity="0.75" />
+          <text x={W - PAD.r + 2} y={ty(currentEstimate) + 3.5} fill="var(--warning)" fontSize="7.5" textAnchor="start">now</text>
+        </>
+      )}
+
+      {/* Main weight line */}
+      <path d={mainPath} fill="none" stroke={col} strokeWidth="2.5"
+        strokeLinejoin="round" strokeLinecap="round" clipPath={`url(#${clipId})`} />
 
       {/* Dots — clickable */}
-      {points.map((p, i) => (
-        <circle
-          key={i}
-          cx={tx(i)} cy={ty(p.y)}
-          r={i === points.length - 1 ? 4 : 3}
-          fill={color || "var(--accent)"}
-          stroke="var(--surface)" strokeWidth="1.5"
-          style={{ cursor: p.sessionId ? "pointer" : "default" }}
-          onClick={() => p.sessionId && onDotClick?.(p.sessionId)}
-        />
-      ))}
+      {points.map((p, i) => {
+        const isLast = i === points.length - 1;
+        return (
+          <circle
+            key={i}
+            cx={tx(i)} cy={ty(p.y)}
+            r={isLast ? 5 : 3.5}
+            fill={isLast ? col : "var(--surface)"}
+            stroke={col} strokeWidth="2"
+            style={{ cursor: p.sessionId ? "pointer" : "default" }}
+            onClick={() => p.sessionId && onDotClick?.(p)}
+          />
+        );
+      })}
 
       {/* X-axis labels: first and last only */}
-      <text x={tx(0)} y={H - 2} fill="var(--text-dim)" fontSize="7" textAnchor="middle">{points[0].x}</text>
-      <text x={tx(points.length - 1)} y={H - 2} fill="var(--text-dim)" fontSize="7" textAnchor="middle">{points[points.length - 1].x}</text>
+      <text x={tx(0)} y={H - 6} fill="var(--text-dim)" fontSize="8.5" textAnchor="middle">{points[0].x}</text>
+      <text x={tx(points.length - 1)} y={H - 6} fill="var(--text-dim)" fontSize="8.5" textAnchor="middle">{points[points.length - 1].x}</text>
     </svg>
+  );
+}
+
+// Bottom-sheet popup showing a session's main sets for a given exercise
+function SessionPopup({ session, exerciseId, units, onClose, onNavigate }) {
+  if (!session) return null;
+  const ex = (session.exercises_performed || []).find(
+    e => e.exercise_id === exerciseId && e.role === "main"
+  );
+  const mainSets = (ex?.set_results || []).filter(s => !s.is_warmup && s.reps_completed > 0);
+  const liftName = LIFT_META[exerciseId]?.name || exerciseId;
+  const liftColor = LIFT_META[exerciseId]?.color || "var(--accent)";
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", background: "rgba(0,0,0,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: "var(--surface)", borderRadius: "16px 16px 0 0", padding: "20px 20px 36px", width: "100%", maxWidth: "480px", boxShadow: "0 -6px 32px rgba(0,0,0,0.35)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle bar */}
+        <div style={{ width: "40px", height: "4px", borderRadius: "2px", background: "var(--border)", margin: "0 auto 16px" }} />
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
+          <span style={{ fontWeight: "700", fontSize: "17px", color: liftColor }}>{liftName}</span>
+          <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>{session.date}</span>
+        </div>
+
+        {mainSets.length === 0 ? (
+          <div style={{ color: "var(--text-dim)", fontSize: "14px", padding: "8px 0" }}>No main sets recorded</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
+            {mainSets.map((s, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "var(--bg)", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                <span style={{ color: "var(--text-dim)", fontSize: "13px", minWidth: "36px" }}>Set {s.set_number}</span>
+                <span style={{ fontWeight: "700", fontSize: "15px", flex: 1, textAlign: "center" }}>
+                  {fmtW(s.weight_kg, units)} × {s.reps_completed}
+                </span>
+                {s.e1rm_kg && (
+                  <span style={{ color: liftColor, fontSize: "13px", minWidth: "70px", textAlign: "right" }}>
+                    ≈ {fmtW(s.e1rm_kg, units)} 1RM
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          style={{ width: "100%", background: "var(--accent)", color: "var(--bg)", border: "none", borderRadius: "10px", padding: "13px", fontFamily: FONT, fontSize: "14px", fontWeight: "700", cursor: "pointer", letterSpacing: "0.05em" }}
+          onClick={onNavigate}
+        >
+          View in History →
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -814,6 +928,42 @@ function estimateCurrentE1rm(entries) {
   return sumWV / sumW;
 }
 
+// Best set per session for a given exercise (main role only, highest e1RM per session)
+function getSessionBestSets(exerciseId, sessions) {
+  return (sessions || [])
+    .map(session => {
+      const mainEx = (session.exercises_performed || []).find(
+        ex => ex.exercise_id === exerciseId && ex.role === "main"
+      );
+      if (!mainEx) return null;
+      let best = null;
+      (mainEx.set_results || []).forEach(s => {
+        if (!s.is_warmup && s.reps_completed > 0 && s.weight_kg > 0) {
+          const e1rm = epley(s.weight_kg, s.reps_completed);
+          if (!best || e1rm > best.e1rm) {
+            best = { weight_kg: s.weight_kg, reps: s.reps_completed, e1rm, sessionId: session.id, date: session.date };
+          }
+        }
+      });
+      return best;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.date > b.date ? 1 : -1));
+}
+
+// Recency-weighted current e1RM from per-session best sets
+function estimateCurrentE1rmFromSets(bestSets) {
+  if (!bestSets.length) return null;
+  const recent = bestSets.slice(-12);
+  let sumW = 0, sumWV = 0;
+  recent.forEach((s, i) => {
+    const w = Math.exp(i / 4);
+    sumW  += w;
+    sumWV += w * s.e1rm;
+  });
+  return sumWV / sumW;
+}
+
 // Best set at exactly 10 reps for a given exercise across all sessions
 function getBest10rm(exerciseId, sessions) {
   let best = null;
@@ -834,34 +984,37 @@ function getBest10rm(exerciseId, sessions) {
 }
 
 function ProgressView({ rootSchema, units, onNavigateToSession }) {
-  const [sub, setSub] = useState("lifts");
+  const [sub, setSub]           = useState("lifts");
+  const [e1rmVisible, setE1rmVisible] = useState({});
+  const [dotPopup, setDotPopup] = useState(null); // { sessionId, exerciseId }
+
   const mainLifts = ["ex_squat", "ex_deadlift", "ex_bench", "ex_ohp"];
   const pfLifts   = ["ex_squat", "ex_bench", "ex_deadlift"]; // for total/Wilks/DOTS
   const sessions  = rootSchema.workout_sessions || [];
   const bwKg      = rootSchema.user_profile?.bodyweight_kg || null;
 
-  // Per-lift data
+  // Per-lift data — one point per session from main sets only
   const liftData = mainLifts.map(id => {
-    const entries = (rootSchema.e1rm_log || [])
-      .filter(e => e.exercise_id === id)
-      .sort((a, b) => (a.session_id > b.session_id ? 1 : -1));
+    const bestSets = getSessionBestSets(id, sessions);
 
-    const points = entries.map(e => ({
-      x:         (e.session_id || "").replace("session_", "").substring(0, 10),
-      y:         dspW(e.e1rm_kg, units),
-      sessionId: e.session_id,
+    const points = bestSets.map(s => ({
+      x:         s.date.substring(5),
+      y:         dspW(s.weight_kg, units),
+      e1rm:      dspW(s.e1rm, units),
+      sessionId: s.sessionId,
+      reps:      s.reps,
     }));
 
-    const allKg     = entries.map(e => e.e1rm_kg);
-    const bestKg    = allKg.length ? Math.max(...allKg) : null;
-    const bestEntry = bestKg != null ? entries.find(e => e.e1rm_kg === bestKg) : null;
-    const bestDate  = bestEntry ? (bestEntry.session_id || "").replace("session_", "").substring(0, 10) : null;
-
-    const currentKg  = estimateCurrentE1rm(entries);
-    const best10rm   = getBest10rm(id, sessions);
+    const bestKg    = bestSets.length ? Math.max(...bestSets.map(s => s.e1rm)) : null;
+    const bestEntry = bestKg != null ? bestSets.find(s => s.e1rm === bestKg) : null;
+    const bestDate  = bestEntry?.date || null;
+    const currentKg = estimateCurrentE1rmFromSets(bestSets);
+    const best10rm  = getBest10rm(id, sessions);
 
     return { id, ...LIFT_META[id], points, bestKg, bestDate, bestEntry, currentKg, best10rm };
   });
+
+  const popupSession = dotPopup ? sessions.find(s => s.id === dotPopup.sessionId) : null;
 
   // Powerlifting total: use current estimated 1RM for each of S/B/D
   const pfData    = liftData.filter(l => pfLifts.includes(l.id));
@@ -883,6 +1036,17 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
 
   return (
     <div>
+      {/* Session dot popup */}
+      {dotPopup && (
+        <SessionPopup
+          session={popupSession}
+          exerciseId={dotPopup.exerciseId}
+          units={units}
+          onClose={() => setDotPopup(null)}
+          onNavigate={() => { setDotPopup(null); onNavigateToSession?.(dotPopup.sessionId); }}
+        />
+      )}
+
       <div style={S.h1}>Stats</div>
       <div style={S.subNav}>
         <button style={S.btn(sub === "lifts"  ? "active" : "default")} onClick={() => setSub("lifts")}>Lifts</button>
@@ -893,12 +1057,14 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
       {/* ── Lifts tab ── */}
       {sub === "lifts" && (
         <>
-          {liftData.map(lift => (
+          {liftData.map(lift => {
+            const showE1rm = !!e1rmVisible[lift.id];
+            return (
             <div key={lift.id} style={S.card}>
               {/* Card header */}
               <div style={{ ...S.cardHead, flexWrap: "wrap", gap: "6px" }}>
                 <span style={{ fontWeight: "700", color: lift.color, fontSize: "16px" }}>{lift.name}</span>
-                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginLeft: "auto" }}>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginLeft: "auto", alignItems: "center" }}>
                   {lift.currentKg != null && (
                     <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>
                       Est. now <span style={{ color: lift.color, fontWeight: "700" }}>{fmtW(Math.round(lift.currentKg * 2) / 2, units)}</span>
@@ -914,14 +1080,27 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
               </div>
 
               {/* Chart */}
-              <div style={{ padding: "8px 8px 4px" }}>
+              <div style={{ padding: "8px 8px 0" }}>
                 {lift.points.length >= 2 ? (
-                  <LineChartWithCurrent
-                    points={lift.points}
-                    color={lift.color}
-                    currentEstimate={lift.currentKg != null ? dspW(lift.currentKg, units) : null}
-                    onDotClick={sid => onNavigateToSession?.(sid)}
-                  />
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: "4px" }}>
+                      <span style={{ fontSize: "11px", color: "var(--text-dim)", letterSpacing: "0.04em" }}>Top set weight</span>
+                      <button
+                        style={{ background: showE1rm ? lift.color : "transparent", color: showE1rm ? "var(--bg)" : "var(--text-dim)", border: `1px solid ${showE1rm ? lift.color : "var(--border)"}`, borderRadius: "5px", padding: "3px 9px", fontSize: "11px", cursor: "pointer", fontFamily: FONT, letterSpacing: "0.04em", fontWeight: showE1rm ? "700" : "400" }}
+                        onClick={() => setE1rmVisible(v => ({ ...v, [lift.id]: !v[lift.id] }))}
+                      >
+                        e1RM
+                      </button>
+                    </div>
+                    <LineChartWithCurrent
+                      points={lift.points}
+                      color={lift.color}
+                      showE1rm={showE1rm}
+                      currentEstimate={lift.currentKg != null ? dspW(lift.currentKg, units) : null}
+                      onDotClick={pt => setDotPopup({ sessionId: pt.sessionId, exerciseId: lift.id })}
+                      uid={lift.id}
+                    />
+                  </>
                 ) : (
                   <div style={{ color: "var(--text-dim)", fontSize: "14px", padding: "16px 0", textAlign: "center" }}>
                     Log at least 2 sessions to see chart
@@ -930,7 +1109,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
               </div>
 
               {/* Best records row */}
-              <div style={{ padding: "0 12px 14px", display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ padding: "8px 12px 14px", display: "flex", flexWrap: "wrap", gap: "10px" }}>
                 {/* Best 1RM */}
                 {lift.bestEntry && (
                   <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "8px 12px", flex: "1 1 130px" }}>
@@ -938,7 +1117,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                     <div style={{ fontWeight: "700", color: "var(--text)", fontSize: "15px" }}>{fmtW(lift.bestKg, units)}</div>
                     <button
                       style={{ background: "transparent", border: "none", color: "var(--accent)", fontSize: "13px", cursor: "pointer", padding: "2px 0", fontFamily: FONT }}
-                      onClick={() => onNavigateToSession?.(lift.bestEntry.session_id)}>
+                      onClick={() => onNavigateToSession?.(lift.bestEntry.sessionId)}>
                       {lift.bestDate} →
                     </button>
                   </div>
@@ -962,7 +1141,7 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                 )}
               </div>
             </div>
-          ))}
+          ); })}
           {liftData.every(l => l.points.length === 0) && (
             <div style={{ color: "var(--text-dim)", fontSize: "15px", textAlign: "center", padding: "32px 0" }}>
               Complete sessions to see progress.
