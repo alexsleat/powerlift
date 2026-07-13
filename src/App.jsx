@@ -1556,6 +1556,9 @@ function previewCycleSessions(inst, tmpl, rootSchema, count = 5) {
 function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
   const increments = tmpl?.progression_model?.lift_increments || [];
   const tmPct      = tmpl?.progression_model?.initial_tm_percentage ?? 0.90;
+  const fh            = tmpl?.progression_model?.failure_handling || {};
+  const usesAmrapGate = fh.tm_reset_rule === "if_amrap_below_expected";
+  const resetPct      = fh.tm_reset_percentage ?? 0.1;
 
   function getBestE1rm(exerciseId) {
     const entries = rootSchema.e1rm_log?.filter(e => e.exercise_id === exerciseId) || [];
@@ -1563,11 +1566,37 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
     return Math.max(...entries.map(e => e.e1rm_kg));
   }
 
+  // Flexible AMRAP gate: reset the TM instead of incrementing only when the
+  // template opts in via tm_reset_rule AND the lift actually performed AMRAP
+  // sets that fell short of their minimum in the latest cycle. 5s PRO variants
+  // (amrap_sets: false) log no AMRAP sets, so they always take the increment.
+  function amrapShortfall(exerciseId) {
+    if (!usesAmrapGate) return false;
+    const sessions = (rootSchema.workout_sessions || []).filter(s => s.programme_instance_id === inst.id);
+    if (sessions.length === 0) return false;
+    const latestCycle = Math.max(...sessions.map(s => s.cycle ?? 0));
+    let sawAmrap = false, met = false;
+    for (const s of sessions) {
+      if ((s.cycle ?? 0) !== latestCycle) continue;
+      for (const ex of (s.exercises_performed || [])) {
+        if (ex.exercise_id !== exerciseId) continue;
+        for (const set of (ex.set_results || [])) {
+          if (!set.is_amrap) continue;
+          sawAmrap = true;
+          if (set.amrap_min == null || Number(set.reps_completed) >= Number(set.amrap_min)) met = true;
+        }
+      }
+    }
+    return sawAmrap && !met;
+  }
+
   const [newTMs, setNewTMs] = useState(() =>
     inst.training_maxes.map(tm => {
       const inc   = increments.find(li => li.exercises?.includes(tm.exercise_id) || li.exercise_id === tm.exercise_id);
       const delta = inc?.increment_kg || 0;
-      return { exercise_id: tm.exercise_id, current_kg: tm.tm_kg, new_kg: tm.tm_kg + delta };
+      const reset = amrapShortfall(tm.exercise_id);
+      const new_kg = reset ? roundToNearest(tm.tm_kg * (1 - resetPct), 2.5) : tm.tm_kg + delta;
+      return { exercise_id: tm.exercise_id, current_kg: tm.tm_kg, new_kg, reset };
     })
   );
   const [editIdx, setEditIdx] = useState(null);
@@ -1610,6 +1639,11 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
           <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "12px" }}>
             Tap New TM to edit. "Use e1RM" sets TM from your best estimated 1RM ({Math.round(tmPct * 100)}%).
           </div>
+          {newTMs.some(t => t.reset) && (
+            <div style={{ color: "var(--danger)", fontSize: "14px", marginBottom: "12px", fontWeight: "bold" }}>
+              ⚠ One or more lifts missed the AMRAP minimum last cycle — their TM is suggested down {Math.round(resetPct * 100)}% instead of up.
+            </div>
+          )}
           <table style={S.table}>
             <thead><tr>
               <th style={S.th}>Lift</th>
@@ -1637,6 +1671,11 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
                       <button style={S.btnSm("active")} onClick={() => setEditIdx(i)}>
                         {fmtW(tm.new_kg, units)} ✎
                       </button>
+                      {tm.reset && (
+                        <div style={{ color: "var(--danger)", fontSize: "12px", marginTop: "3px" }}>
+                          AMRAP missed · reset −{Math.round(resetPct * 100)}%
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -3289,6 +3328,10 @@ export default function App() {
           reps_completed: r?.reps ?? 0,
           reps_target: set.reps, rpe: r?.rpe ?? null,
           success: r?.done ?? false, is_warmup: set.isWarmup,
+          // Persist AMRAP flag + minimum so TM review can gate increments only
+          // for variants that actually prescribe AMRAP (5s PRO carries false).
+          is_amrap: !!set.isAmrap,
+          amrap_min: set.isAmrap ? (set.amrap_minimum ?? null) : null,
           // Include true singles: a 1-rep set has e1RM = weight (B4).
           e1rm_kg: (!set.isWarmup && (r?.reps ?? 0) >= 1) ? epley(set.weight, r.reps) : null
         };
