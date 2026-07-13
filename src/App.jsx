@@ -1457,21 +1457,70 @@ function buildSessionPlan(inst, tmpl, rootSchema) {
     return { exercises, week, day, weekLabel: levWeek.week_label, role: inst.current_cycle_role || "leviathan", mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
   }
 
-  // StrongLifts
+  // StrongLifts (and other linear-weight A/B templates)
   if (ph.workout_templates) {
-    const patIdx  = (inst.current_day - 1) % ph.session_alternation_pattern.length;
+    // Alternate by cumulative session count, not day-of-week — the 6-long A/B
+    // pattern never advances past the weekly day reset otherwise, so every week
+    // runs A,B,A permanently (C2).
+    const daysPerWeek   = tmpl.days_per_week || 3;
+    const weeksPerCycle = tmpl.cycle_structure?.mesocycle_weeks || 3;
+    const sessionNumber = ((inst.current_cycle || 1) - 1) * weeksPerCycle * daysPerWeek
+                        + ((inst.current_week || 1) - 1) * daysPerWeek
+                        + ((inst.current_day || 1) - 1);
+    const patIdx  = sessionNumber % ph.session_alternation_pattern.length;
     const key     = ph.session_alternation_pattern[patIdx];
     const exercises = ph.workout_templates[key].map(te => {
-      const liftW  = rootSchema?.lift_maxes?.find(l => l.exercise_id === te.exercise_id)?.one_rm_kg;
-      const fakeW  = liftW ? roundToNearest(liftW * 0.7, 2.5) : 60;
-      const warmups = te.set_scheme_type !== "single_top_set" ? calcWarmupSets(fakeW, tmpl.warmup_protocol.start_weight_kg, tmpl.warmup_protocol.max_warmup_sets) : [{ weight: 20, reps: 5 }];
-      const work   = Array.from({ length: te.sets }, (_, i) => ({ setIndex: i, weight: fakeW, reps: te.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null }));
+      // Working weight is tracked per lift on the instance and advanced by the
+      // linear-progression logic on completion (C1). Fall back to a seed for
+      // instances/lifts predating working_weights (empty bar when no 1RM data).
+      const wwEntry = inst.working_weights?.find(w => w.exercise_id === te.exercise_id);
+      const liftW   = rootSchema?.lift_maxes?.find(l => l.exercise_id === te.exercise_id)?.one_rm_kg;
+      const seedW   = liftW ? roundToNearest(liftW * 0.7, 2.5) : 20;
+      const workW   = Math.max(wwEntry?.weight_kg ?? seedW, 20);
+      const warmups = te.set_scheme_type !== "single_top_set" ? calcWarmupSets(workW, tmpl.warmup_protocol.start_weight_kg, tmpl.warmup_protocol.max_warmup_sets) : [{ weight: 20, reps: 5 }];
+      const work    = Array.from({ length: te.sets }, (_, i) => ({ setIndex: i, weight: workW, reps: te.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null }));
       return { exercise_id: te.exercise_id, role: te.role,
         sets: [...warmups.map((w, i) => ({ setIndex: i, weight: w.weight, reps: w.reps, isWarmup: true, isDone: false, repsLogged: null, rpeLogged: null })), ...work] };
     });
     return { exercises, week: inst.current_week, day: inst.current_day, weekLabel: `Workout ${key}`, role: null, mainLiftId: null, instanceId: inst.id };
   }
   return null;
+}
+
+// Linear-weight progression (e.g. StrongLifts): advance each performed main
+// lift's working weight — increment on a fully successful session, repeat the
+// weight on failure, and deload after N consecutive failures (C1).
+function updateLinearWeights(inst, tmpl, exercisesPerformed) {
+  const pm = tmpl?.progression_model || {};
+  const fh = pm.failure_handling || {};
+  const deloadPct   = fh.deload_percentage ?? 0.1;
+  const deloadAfter = fh.deload_after_consecutive_failures ?? 3;
+  const incFor = (exId) => {
+    const li = (pm.lift_increments || []).find(x => x.exercises?.includes(exId) || x.exercise_id === exId);
+    return li?.increment_kg ?? 2.5;
+  };
+  const ww = [...(inst.working_weights || [])];
+  for (const ex of exercisesPerformed) {
+    if (ex.role !== "main") continue;
+    const workSets = ex.set_results.filter(s => !s.is_warmup);
+    if (workSets.length === 0) continue;
+    const success = workSets.every(s => Number(s.reps_completed) >= Number(s.reps_target) && Number(s.reps_target) > 0);
+    let idx = ww.findIndex(w => w.exercise_id === ex.exercise_id);
+    if (idx < 0) {
+      ww.push({ exercise_id: ex.exercise_id, weight_kg: workSets[0].weight_kg, consecutive_fails: 0 });
+      idx = ww.length - 1;
+    }
+    const entry = ww[idx];
+    if (success) {
+      ww[idx] = { ...entry, weight_kg: roundToNearest(entry.weight_kg + incFor(ex.exercise_id), 2.5), consecutive_fails: 0 };
+    } else {
+      const fails = (entry.consecutive_fails || 0) + 1;
+      ww[idx] = fails >= deloadAfter
+        ? { ...entry, weight_kg: Math.max(roundToNearest(entry.weight_kg * (1 - deloadPct), 2.5), 20), consecutive_fails: 0 }
+        : { ...entry, consecutive_fails: fails };
+    }
+  }
+  return ww;
 }
 
 function getTemplateExercises(tmpl) {
@@ -1713,13 +1762,21 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
         tm_kg: roundToNearest(lm.one_rm_kg * tmPct, 2.5),
         last_updated: today, cycle_when_set: 1
       }));
+    // Seed per-lift working weights for linear-progression templates (C1).
+    const working_weights = tmpl.progression_model?.type === "linear_weight"
+      ? exIds.map(exId => {
+          const oneRm = getOneRmKg(exId);
+          const seed  = oneRm ? Math.max(roundToNearest(oneRm * 0.7, 2.5), 20) : 20;
+          return { exercise_id: exId, weight_kg: seed, consecutive_fails: 0 };
+        })
+      : [];
     const newInst = {
       id: `prog_inst_${Date.now()}`, template_id: selectedId, status: "active",
       started_date: today,
       current_phase_id: tmpl.phases?.[0]?.phase_id || null,
       current_cycle_role: selectedId === "531_fsl" ? "leader" : "standard",
       current_macrocycle_block: 1, current_cycle: 1, current_week: 1, current_day: 1,
-      training_maxes, failure_tracking: [], phase_history: [], needs_tm_review: false
+      training_maxes, working_weights, failure_tracking: [], phase_history: [], needs_tm_review: false
     };
     onChange({ ...rootSchema, lift_maxes: newLiftMaxes, programme_instances: [...rootSchema.programme_instances, newInst] });
     setSelectedId(""); setStep("template"); setInputs({});
@@ -3270,8 +3327,11 @@ export default function App() {
       if (current_day > maxDay)  { current_day = 1; current_week++; }
       if (maxWeek && current_week > maxWeek) { current_week = 1; current_cycle++; cycleCompleted = true; }
       const isTmBased = tmpl?.progression_model?.type === "training_max";
+      const isLinear  = tmpl?.progression_model?.type === "linear_weight";
+      const working_weights = isLinear ? updateLinearWeights(inst, tmpl, exercisesPerformed) : inst.working_weights;
       newInsts = newInsts.map(i => i.id !== inst.id ? i : {
         ...i, current_day, current_week, current_cycle,
+        ...(isLinear ? { working_weights } : {}),
         needs_tm_review: isTmBased && cycleCompleted ? true : (i.needs_tm_review || false)
       });
     }
