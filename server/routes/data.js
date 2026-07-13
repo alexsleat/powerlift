@@ -5,6 +5,33 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
+// Reject a whole-schema sync if any submitted id already belongs to another
+// user. Guards against cross-tenant overwrites (IDOR) and id squatting on the
+// global TEXT primary keys of programme_instances / workout_sessions.
+function assertOwnership(table, ids, userId) {
+  if (!ids.length) return;
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT id, user_id FROM ${table} WHERE id IN (${placeholders})`).all(...ids);
+  for (const r of rows) {
+    if (r.user_id !== userId) {
+      const e = new Error(`Ownership conflict on ${table} id ${r.id}`);
+      e.status = 409;
+      throw e;
+    }
+  }
+}
+
+// Whole-schema sync is authoritative: any of this user's rows whose id is not
+// in the submitted set has been deleted client-side, so remove it server-side.
+function deleteAbsent(table, keepIds, userId, keyCol = 'id') {
+  if (keepIds.length) {
+    const placeholders = keepIds.map(() => '?').join(',');
+    db.prepare(`DELETE FROM ${table} WHERE user_id = ? AND ${keyCol} NOT IN (${placeholders})`).run(userId, ...keepIds);
+  } else {
+    db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(userId);
+  }
+}
+
 // ── GET /api/data/schema ──────────────────────────────────────────────────────
 // Assembles the full rootSchema for the authenticated user.
 router.get('/schema', (req, res) => {
@@ -80,6 +107,8 @@ router.put('/schema', (req, res) => {
       for (const lm of (schema.lift_maxes || [])) {
         upsertMax.run(userId, lm.exercise_id, lm.one_rm_kg, lm.tested_date ?? null, lm.method ?? null);
       }
+      // Remove maxes the client dropped (keyed by exercise_id, not id).
+      deleteAbsent('lift_maxes', (schema.lift_maxes || []).map(m => m.exercise_id), userId, 'exercise_id');
 
       // ── e1rm_log (clear + reinsert — entries are immutable once computed) ──
       db.prepare('DELETE FROM e1rm_log WHERE user_id = ?').run(userId);
@@ -92,7 +121,9 @@ router.put('/schema', (req, res) => {
         insertE1rm.run(userId, e.exercise_id, e.session_id ?? null, e.e1rm_kg, e.weight_kg ?? null, e.reps_completed ?? null, e.formula_used ?? null, date);
       }
 
-      // ── Programme instances (upsert) ────────────────────────────────────────
+      // ── Programme instances (ownership-checked upsert + reconcile) ─────────
+      const instIds = (schema.programme_instances || []).map(i => i.id);
+      assertOwnership('programme_instances', instIds, userId);
       const upsertInst = db.prepare(`
         INSERT INTO programme_instances (id, user_id, template_id, status, data, started_date, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -100,19 +131,31 @@ router.put('/schema', (req, res) => {
           status = excluded.status,
           data = excluded.data,
           updated_at = excluded.updated_at
+        WHERE programme_instances.user_id = excluded.user_id
       `);
       for (const inst of (schema.programme_instances || [])) {
         upsertInst.run(inst.id, userId, inst.template_id, inst.status, JSON.stringify(inst), inst.started_date);
       }
+      deleteAbsent('programme_instances', instIds, userId);
 
-      // ── Workout sessions (insert-only — sessions never change after save) ──
-      const insertSession = db.prepare(`
-        INSERT OR IGNORE INTO workout_sessions (id, user_id, programme_instance_id, date, data)
+      // ── Workout sessions (ownership-checked upsert + reconcile) ────────────
+      // Upsert (not INSERT OR IGNORE) so session edits persist; reconcile so
+      // client-side deletions propagate instead of resurrecting on reload.
+      const sessionIds = (schema.workout_sessions || []).map(s => s.id);
+      assertOwnership('workout_sessions', sessionIds, userId);
+      const upsertSession = db.prepare(`
+        INSERT INTO workout_sessions (id, user_id, programme_instance_id, date, data)
         VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          programme_instance_id = excluded.programme_instance_id,
+          date = excluded.date,
+          data = excluded.data
+        WHERE workout_sessions.user_id = excluded.user_id
       `);
       for (const s of (schema.workout_sessions || [])) {
-        insertSession.run(s.id, userId, s.programme_instance_id ?? null, s.date, JSON.stringify(s));
+        upsertSession.run(s.id, userId, s.programme_instance_id ?? null, s.date, JSON.stringify(s));
       }
+      deleteAbsent('workout_sessions', sessionIds, userId);
 
       // ── Custom exercises (replace) ─────────────────────────────────────────
       db.prepare(`
@@ -123,6 +166,10 @@ router.put('/schema', (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
+    if (err.status === 409) {
+      console.warn('Schema sync ownership conflict:', err.message);
+      return res.status(409).json({ error: 'Ownership conflict — some records belong to another account' });
+    }
     console.error('Schema sync error:', err);
     res.status(500).json({ error: 'Failed to save schema' });
   }
