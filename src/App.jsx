@@ -3227,10 +3227,13 @@ export default function App() {
         const r = results[`${exIdx}-${si}`];
         return {
           set_number: si + 1, weight_kg: set.weight,
-          reps_completed: r?.reps ?? (typeof set.reps === "number" ? set.reps : 0),
+          // Unlogged sets record 0 reps (not the planned target) so skipped
+          // work never inflates tonnage / history / best-set stats (B3).
+          reps_completed: r?.reps ?? 0,
           reps_target: set.reps, rpe: r?.rpe ?? null,
           success: r?.done ?? false, is_warmup: set.isWarmup,
-          e1rm_kg: (!set.isWarmup && (r?.reps ?? 0) > 1) ? epley(set.weight, r.reps) : null
+          // Include true singles: a 1-rep set has e1RM = weight (B4).
+          e1rm_kg: (!set.isWarmup && (r?.reps ?? 0) >= 1) ? epley(set.weight, r.reps) : null
         };
       })
     }));

@@ -73,6 +73,38 @@ router.put('/schema', (req, res) => {
   if (!schema || typeof schema !== 'object')
     return res.status(400).json({ error: 'Request body must be a JSON object' });
 
+  // ── Structural validation (A3) ────────────────────────────────────────────
+  // Reject malformed rows up front: undefined/NaN values would otherwise make
+  // better-sqlite3 throw mid-transaction (500), and unbounded arrays/weights
+  // enable storage abuse and poison stats.
+  const MAX_ROWS = 5000;
+  try {
+    for (const k of ['lift_maxes', 'e1rm_log', 'programme_instances', 'workout_sessions', 'custom_exercises']) {
+      if (schema[k] == null) continue;
+      if (!Array.isArray(schema[k])) throw new Error(`${k} must be an array`);
+      if (schema[k].length > MAX_ROWS) throw new Error(`${k} exceeds ${MAX_ROWS} rows`);
+    }
+    for (const lm of (schema.lift_maxes || [])) {
+      if (typeof lm.exercise_id !== 'string' || !lm.exercise_id) throw new Error('lift_maxes.exercise_id required');
+      if (typeof lm.one_rm_kg !== 'number' || !Number.isFinite(lm.one_rm_kg) || lm.one_rm_kg <= 0 || lm.one_rm_kg > 600)
+        throw new Error('lift_maxes.one_rm_kg must be between 0 and 600');
+    }
+    for (const e of (schema.e1rm_log || [])) {
+      if (typeof e.exercise_id !== 'string' || !e.exercise_id) throw new Error('e1rm_log.exercise_id required');
+      if (typeof e.e1rm_kg !== 'number' || !Number.isFinite(e.e1rm_kg) || e.e1rm_kg <= 0 || e.e1rm_kg > 600)
+        throw new Error('e1rm_log.e1rm_kg must be between 0 and 600');
+    }
+    for (const inst of (schema.programme_instances || [])) {
+      if (typeof inst.id !== 'string' || !inst.id) throw new Error('programme_instances.id required');
+    }
+    for (const s of (schema.workout_sessions || [])) {
+      if (typeof s.id !== 'string' || !s.id) throw new Error('workout_sessions.id required');
+      if (typeof s.date !== 'string' || !s.date) throw new Error('workout_sessions.date required');
+    }
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
   try {
     db.transaction(() => {
       // ── Profile ────────────────────────────────────────────────────────────

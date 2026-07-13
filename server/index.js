@@ -15,8 +15,9 @@ app.set('trust proxy', 1);
 // Security headers
 app.use(helmet());
 
-// Body parsing — 10 MB to accommodate the full exercise library JSON
-app.use(express.json({ limit: '10mb' }));
+// Body parsing — 2 MB is ample (the full exercise library is ~110 KB); a
+// tighter cap limits blob-storage abuse on the data routes (A3).
+app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 
 // CORS — in production nginx proxies /api so requests arrive same-origin.
@@ -40,8 +41,18 @@ const authLimiter = rateLimit({
   legacyHeaders:   false,
 });
 
+// General limiter on the data routes — generous for normal whole-schema syncs
+// but caps abuse (A3).
+const dataLimiter = rateLimit({
+  windowMs:        60 * 1000,
+  max:             120,
+  message:         { error: 'Too many requests — please slow down' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
+
 app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/data', dataRoutes);
+app.use('/api/data', dataLimiter, dataRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

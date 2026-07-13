@@ -11,4 +11,6 @@ Working through `powerlift-database-branch-review.md` findings by severity, in c
 
 Fixes rely on the client always sending the FULL schema (whole-schema sync, confirmed by review B10), so absent ids = deleted.
 
-**Not yet done:** A3–A18, B2–B10, C1–C12, D3–D6, E1–E3. Suggested next batch (per review order #3): A3 (validation/rate-limit), A4–A8 (token hygiene, secure cookies, nginx headers, email escaping), B3 (skipped sets), B4 (singles in e1RM). Then C1–C3 (training logic). Node/npm NOT installed on this dev machine — can't run syntax checks locally.
+**Batch 2 done (2026-07-13):** A3 (data.js structural validation + index.js dataLimiter 120/min + body limit 10mb→2mb), A4 (access TTL 24h→15m), A5 (refresh rotation + pruneExpiredTokens on /refresh), A6 (secure cookie defaults on in production), A7 (nginx.conf security headers + CSP), A8 (escapeHtml username in reset email), A9 (jwt algorithms:['HS256']), A10 (register/reset max lengths + username charset), A12 (SQLITE_CONSTRAINT_UNIQUE code check), A13 (forgotLimiter 5/hr), A16 (removed nodemailer). B3 (App.jsx:3230 unlogged sets → reps_completed 0), B4 (App.jsx:3233 e1rm for reps >= 1).
+
+**Not yet done:** A11, A14, A15, A17, A18, B2, B5–B10, C1–C12, D3–D6, E1–E3. Suggested next batch (per review order #4): C1–C3 (StrongLifts progression + A/B alternation, 5/3/1 AMRAP gating — core training logic, all in App.jsx buildSessionPlan / TM review). Node/npm NOT installed on this dev machine — can't run syntax checks locally.
