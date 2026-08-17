@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "./api.js";
+import { queueSchema, readPendingSchema, clearPendingSchema, subscribeSync, flushSchema, schemaSignature, setSyncOwner } from "./sync.js";
 import AuthPage from "./AuthPage.jsx";
 
 // ─── APP VERSION ────────────────────────────────────────────────────────────
 // ⚠️ BUMP THIS on every user-facing change (shown on the Settings page so it's
 // obvious which build is deployed). ANY coder or agent editing this app MUST
 // update it — use semver: patch = fix, minor = feature, major = breaking.
-export const APP_VERSION = "1.3.0";
+export const APP_VERSION = "1.4.0";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 
@@ -496,6 +497,21 @@ function Modal({ onClose, children }) {
     <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={S.modalBox}>{children}</div>
     </div>
+  );
+}
+
+// Confirmation dialog for anything destructive or disruptive. `tone` styles the
+// confirm button (danger for deletes, warning for interruptions).
+function ConfirmModal({ title, body, confirmLabel = "Confirm", tone = "danger", onConfirm, onClose }) {
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ ...S.h3, marginBottom: "12px" }}>{title}</div>
+      {body && <div style={{ color: "var(--text-muted)", fontSize: "15px", lineHeight: 1.5, marginBottom: "18px" }}>{body}</div>}
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button style={{ ...S.btn(tone), flex: 1 }} onClick={onConfirm}>{confirmLabel}</button>
+        <button style={{ ...S.btn("ghost"), flex: 1 }} onClick={onClose}>Cancel</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -2024,6 +2040,53 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
   );
 }
 
+// ─── SYNC STATUS (Settings) ───────────────────────────────────────────────────
+// Shows whether the server actually has your data, the last error if not, and
+// how close the whole-schema payload is to the 2 MB request limit — the failure
+// mode you'd otherwise only notice as a session that "didn't save".
+const SCHEMA_LIMIT_BYTES = 2 * 1024 * 1024;
+
+function SyncStatusPanel({ rootSchema }) {
+  const [syncState, setSyncState] = useState({ status: 'idle', hasPending: false });
+  useEffect(() => subscribeSync(setSyncState), []);
+
+  const bytes = (() => {
+    try { return new Blob([JSON.stringify({ ...rootSchema, programme_templates: undefined })]).size; }
+    catch { return null; }
+  })();
+  const pct = bytes ? Math.round((bytes / SCHEMA_LIMIT_BYTES) * 100) : null;
+
+  const label = {
+    idle:     { text: "All changes saved to the server", color: "var(--success)" },
+    saving:   { text: "Saving…",                          color: "var(--text-muted)" },
+    retrying: { text: "Not saved — retrying",             color: "var(--warning)" },
+    offline:  { text: "Offline — saved on this device only", color: "var(--danger)" },
+  }[syncState.status] || { text: syncState.status, color: "var(--text-muted)" };
+
+  return (
+    <>
+      <div style={{ color: label.color, fontSize: "15px", marginBottom: "6px", fontWeight: "600" }}>{label.text}</div>
+      <div style={{ color: "var(--text-dim)", fontSize: "13px", marginBottom: "4px" }}>
+        {syncState.lastSyncedAt ? `Last confirmed ${new Date(syncState.lastSyncedAt).toLocaleTimeString()}` : "Nothing sent yet this session"}
+        {bytes != null && ` · payload ${(bytes / 1024 / 1024).toFixed(2)} MB of 2 MB (${pct}%)`}
+      </div>
+      {syncState.lastError && (
+        <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "8px", fontFamily: MONO_FONT }}>
+          {syncState.lastError} · {syncState.attempt} failed {syncState.attempt === 1 ? "attempt" : "attempts"}
+        </div>
+      )}
+      {pct != null && pct >= 80 && (
+        <div style={{ color: "var(--warning)", fontSize: "13px", marginBottom: "8px" }}>
+          ⚠ Close to the request size limit. Past it, every save is rejected — back up and prune old sessions.
+        </div>
+      )}
+      {syncState.hasPending && (
+        <button style={S.btn("warning")} onClick={flushSchema}>Retry now</button>
+      )}
+    </>
+  );
+}
+
 // ─── SCHEMA SECTION ───────────────────────────────────────────────────────────
 
 function SchemaSection({ title, children, defaultOpen = true }) {
@@ -2367,6 +2430,10 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
             })()}
           </SchemaSection>
 
+          <SchemaSection title="Sync">
+            <SyncStatusPanel rootSchema={rootSchema} />
+          </SchemaSection>
+
           <SchemaSection title="Backup / Restore">
             <BackupRestore rootSchema={rootSchema} exLib={exLib} onRestore={onRestore} />
           </SchemaSection>
@@ -2537,6 +2604,23 @@ function ExHistoryStrip({ exerciseId, role, sessions, units, n, repRanges, isOpe
   );
 }
 
+// ─── SESSION DRAFT (crash + navigation recovery) ──────────────────────────────
+// The live session is mirrored to localStorage on every change, so it survives a
+// reload, a crash, or a detour into editing a past session. Module-level so the
+// history list can tell whether a session is currently in progress.
+const DRAFT_KEY = 'pl-session-draft';
+
+function readSessionDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function clearSessionDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+}
+
 // ─── SESSION RUNNER ───────────────────────────────────────────────────────────
 
 function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, onContextChange, editingSession, onEditDone, onNavigateToStats }) {
@@ -2575,16 +2659,53 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   const sessionStartTsRef = useRef(null);
 
   // ── Session draft (crash recovery) ─────────────────────────────────────────
-  const DRAFT_KEY = 'pl-session-draft';
+  const [draftOffer, setDraftOffer] = useState(readSessionDraft);
+  const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
+  const [confirmAbandon,      setConfirmAbandon]      = useState(false);
 
-  const [draftOffer, setDraftOffer] = useState(() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-  });
+  // Editing a past session must never wipe the live draft — that's an
+  // in-progress workout, and abandoning or saving an edit used to delete it.
+  function clearDraft() { if (!sessionPlan?.editingSessionId) clearSessionDraft(); }
 
-  function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+  // Drop an in-progress session, or leave an edit without saving.
+  function abandonSession() {
+    const wasEdit = !!sessionPlan?.editingSessionId;
+    if (!wasEdit) clearSessionDraft();
+    setPhase("pick");
+    setResting(false);
+    setConfirmAbandon(false);
+    // Clear App's editingSession too, otherwise the draft offer stays hidden and
+    // re-tapping Edit on the same session does nothing.
+    if (wasEdit) onEditDone?.();
+  }
+
+  function requestAbandon() {
+    // Leaving an edit throws nothing away, so only a live session needs a prompt.
+    if (sessionPlan?.editingSessionId) abandonSession();
+    else setConfirmAbandon(true);
+  }
+
+  // Shared by both session layouts.
+  function abandonConfirmModal() {
+    if (!confirmAbandon) return null;
+    return (
+      <ConfirmModal
+        title="Abandon this session?"
+        confirmLabel="Abandon it"
+        body="Everything logged so far will be discarded and can't be recovered. Use Save instead if you want to keep a partial session."
+        onConfirm={abandonSession}
+        onClose={() => setConfirmAbandon(false)}
+      />
+    );
+  }
+
+  // Re-offer the saved draft whenever we land back on the pick screen with no
+  // live session — after editing a past session, say. The offer used to be read
+  // once at mount, so an in-progress session looked lost until a page reload.
+  useEffect(() => {
+    if (phase !== "pick" || editingSession) return;
+    setDraftOffer(readSessionDraft());
+  }, [phase, editingSession]);
 
   function restoreDraft(draft) {
     setSessionPlan(draft.sessionPlan);
@@ -2951,6 +3072,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     return (
       <div>
         {/* Modals */}
+        {abandonConfirmModal()}
         {logModal && logModalData && (
           <LogSetModal
             set={{ ...logModalData, weight: logModal.editWeight ?? getEffectiveWeight(logModal.exIdx, logModal.setIdx, logModalData) }}
@@ -2977,7 +3099,9 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
             <button style={S.btnSm("warning")} onClick={() => { setPhase("summary"); setResting(false); }}>Save</button>
-            <button style={S.btnSm("danger")}  onClick={() => { clearDraft(); setPhase("pick"); setResting(false); }}>Abandon</button>
+            <button style={S.btnSm("danger")}  onClick={requestAbandon}>
+              {sessionPlan?.editingSessionId ? "Cancel Edit" : "Abandon"}
+            </button>
           </div>
         </div>
 
@@ -3154,6 +3278,18 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
     return (
       <div>
+        {confirmDiscardDraft && (
+          <ConfirmModal
+            title="Discard unsaved session?"
+            confirmLabel="Discard it"
+            body={<>
+              {draftOffer?.sessionPlan?.weekLabel} — Day {draftOffer?.sessionPlan?.day}. Everything logged in it will be
+              lost and it can't be recovered.
+            </>}
+            onConfirm={() => { clearSessionDraft(); setDraftOffer(null); setConfirmDiscardDraft(false); }}
+            onClose={() => setConfirmDiscardDraft(false)}
+          />
+        )}
         <div style={S.h1}>Start Session</div>
 
         {draftOffer && !editingSession && (
@@ -3166,7 +3302,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button style={{ ...S.btn("primary"), flex: 1 }} onClick={() => restoreDraft(draftOffer)}>Resume →</button>
-                <button style={{ ...S.btn("default"), flex: 1 }} onClick={() => { clearDraft(); setDraftOffer(null); }}>Discard</button>
+                <button style={{ ...S.btn("default"), flex: 1 }} onClick={() => setConfirmDiscardDraft(true)}>Discard</button>
               </div>
             </div>
           </div>
@@ -3305,6 +3441,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
     const modals = (
       <>
+        {abandonConfirmModal()}
         {logModal && logModalData && (
           <LogSetModal
             set={{ ...logModalData, weight: logModal.editWeight ?? getEffectiveWeight(logModal.exIdx, logModal.setIdx, logModalData) }}
@@ -3343,7 +3480,9 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
             <button style={S.btnSm("warning")} onClick={() => { setPhase("summary"); setResting(false); }}>Save</button>
-            <button style={S.btnSm("danger")}  onClick={() => { clearDraft(); setPhase("pick"); setResting(false); }}>Abandon</button>
+            <button style={S.btnSm("danger")}  onClick={requestAbandon}>
+              {sessionPlan?.editingSessionId ? "Cancel Edit" : "Abandon"}
+            </button>
           </div>
         </div>
 
@@ -3429,8 +3568,12 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
 function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlightSession, onHighlightClear }) {
   const units = rootSchema.user_profile?.units || "kg";
-  const [expanded,   setExpanded]   = useState(highlightSession ?? null);
-  const [confirmDel, setConfirmDel] = useState(null);
+  const [expanded,    setExpanded]    = useState(highlightSession ?? null);
+  const [confirmDel,  setConfirmDel]  = useState(null);   // session pending deletion
+  const [confirmEdit, setConfirmEdit] = useState(null);   // session pending edit
+  // Delete buttons are hidden until you deliberately turn on manage mode — they
+  // sit next to Edit on a tappable card, which made accidental deletes far too easy.
+  const [manageMode,  setManageMode]  = useState(false);
   const highlightRef = useRef(null);
 
   // Scroll to highlighted session on mount / change
@@ -3477,7 +3620,46 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
 
   return (
     <div>
-      <div style={S.h1}>History</div>
+      {confirmEdit && (
+        <ConfirmModal
+          title="Edit this session?"
+          tone="warning"
+          confirmLabel="Edit session"
+          body={<>
+            Reopens {confirmEdit.date} · {instName(confirmEdit)} in the runner so you can change what was logged.
+            {readSessionDraft()
+              ? " Your in-progress session is saved — the Run tab will offer it back when you're done here."
+              : ""}
+          </>}
+          onConfirm={() => { const s = confirmEdit; setConfirmEdit(null); onEditSession(s); }}
+          onClose={() => setConfirmEdit(null)}
+        />
+      )}
+      {confirmDel && (
+        <ConfirmModal
+          title="Delete this session?"
+          confirmLabel="Delete permanently"
+          body={<>
+            {confirmDel.date} · {instName(confirmDel)} — {sessionSummary(confirmDel).sets} logged sets and their
+            estimated-1RM entries will be removed. This can't be undone.
+          </>}
+          onConfirm={() => { onDeleteSession(confirmDel.id); setConfirmDel(null); setExpanded(null); }}
+          onClose={() => setConfirmDel(null)}
+        />
+      )}
+
+      <div style={{ ...S.flex, justifyContent: "space-between", marginBottom: "16px" }}>
+        <div style={{ ...S.h1, margin: 0 }}>History</div>
+        <button style={S.btnSm(manageMode ? "danger" : "ghost")}
+          onClick={() => { setManageMode(m => !m); setConfirmDel(null); }}>
+          {manageMode ? "Done" : "Manage"}
+        </button>
+      </div>
+      {manageMode && (
+        <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "12px" }}>
+          Manage mode — delete buttons are showing. Tap Done when you've finished.
+        </div>
+      )}
       {sessions.map(session => {
         const isOpen = expanded === session.id;
         const totals = sessionSummary(session);
@@ -3499,14 +3681,12 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
                 </div>
               </div>
               <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
-                <button style={S.btnSm("warning")} onPointerDown={e => { e.stopPropagation(); onEditSession(session); }}>Edit</button>
-                {confirmDel === session.id ? (
-                  <>
-                    <button style={S.btnSm("danger")} onPointerDown={e => { e.stopPropagation(); onDeleteSession(session.id); setConfirmDel(null); }}>Confirm</button>
-                    <button style={S.btnSm("ghost")}  onPointerDown={e => { e.stopPropagation(); setConfirmDel(null); }}>✕</button>
-                  </>
-                ) : (
-                  <button style={S.btnSm("danger")} onPointerDown={e => { e.stopPropagation(); setConfirmDel(session.id); setExpanded(null); }}>Del</button>
+                {/* onClick, not onPointerDown: pointerdown fires the instant a
+                    finger lands, so starting a scroll on these buttons used to
+                    trigger them. */}
+                <button style={S.btnSm("warning")} onClick={e => { e.stopPropagation(); setConfirmEdit(session); }}>Edit</button>
+                {manageMode && (
+                  <button style={S.btnSm("danger")} onClick={e => { e.stopPropagation(); setConfirmDel(session); }}>Del</button>
                 )}
                 <span style={{ color: "var(--text-dim)", fontSize: "15px" }}>{isOpen ? "▲" : "▼"}</span>
               </div>
@@ -3545,6 +3725,54 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
   );
 }
 
+// ─── SYNC STATUS + RECOVERY ───────────────────────────────────────────────────
+
+// Header pill — silent when everything is on the server, visible (and tappable
+// to retry) the moment something isn't.
+function SyncPill({ syncState, onRetry }) {
+  const { status, attempt } = syncState;
+  if (status === 'idle') return null;
+
+  const look = {
+    saving:   { text: "⟳ saving",  color: "var(--text-dim)", border: "var(--border)"      },
+    retrying: { text: "⚠ unsaved", color: "var(--warning)",  border: "var(--warning-dim)" },
+    offline:  { text: "⚠ offline", color: "var(--danger)",   border: "var(--danger-dim)"  },
+  }[status] || { text: "⟳", color: "var(--text-dim)", border: "var(--border)" };
+
+  const title = status === 'saving' ? "Saving to the server…"
+    : status === 'offline' ? "No connection — your work is saved on this device and will sync when you're back online."
+    : `Couldn't reach the server (${attempt} ${attempt === 1 ? "try" : "tries"}). Saved on this device; tap to retry now.`;
+
+  return (
+    <button style={{ ...S.headerBtn, color: look.color, borderColor: look.border }}
+      onClick={onRetry} title={title}>
+      {look.text}
+    </button>
+  );
+}
+
+function RecoveryBanner({ recovery, onKeep, onUseServer }) {
+  const when = recovery.savedAt ? new Date(recovery.savedAt).toLocaleString() : "your last visit";
+  const extra = recovery.extraSessions;
+  return (
+    <div style={{ ...S.card, borderColor: "var(--warning-dim)", marginBottom: "12px" }}>
+      <div style={{ ...S.cardHead, background: "var(--warning-dim)" }}>
+        <span style={{ fontWeight: "bold", color: "var(--warning)", fontSize: "15px" }}>Unsaved work recovered</span>
+      </div>
+      <div style={S.cardBody}>
+        <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "12px" }}>
+          Changes from {when} never reached the server, so they were restored from this device and are being re-sent.
+          {extra > 0 && ` Includes ${extra} session${extra === 1 ? "" : "s"} the server didn't have.`}
+        </div>
+        <div style={{ ...S.flex, flexWrap: "wrap" }}>
+          <button style={S.btn("success")} onClick={onKeep}>Keep this copy</button>
+          <button style={S.btn("ghost")}   onClick={onUseServer}>Discard — use server copy</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -3557,6 +3785,11 @@ export default function App() {
   const [highlightSession,  setHighlightSession]  = useState(null); // id to scroll/highlight in history
   const [user,           setUser]           = useState(null);
   const [authChecked,    setAuthChecked]    = useState(false);
+  // Unsynced work recovered at load: { savedAt, serverSchema, extraSessions }
+  const [recovery,       setRecovery]       = useState(null);
+  const [syncState,      setSyncState]      = useState({ status: 'idle', hasPending: false });
+
+  useEffect(() => subscribeSync(setSyncState), []);
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   const [themeOverride, setThemeOverride] = useState(() => localStorage.getItem('pl-theme'));
@@ -3590,6 +3823,7 @@ export default function App() {
       if (!authData) { setAuthChecked(true); setLoading(false); return; }
       api.setToken(authData.accessToken);
       setUser(authData.user);
+      setSyncOwner(authData.user?.id);
       await loadAppData();
       setAuthChecked(true);
       setLoading(false);
@@ -3603,29 +3837,66 @@ export default function App() {
         api.data.schema(), api.data.exercises(), api.data.templates(),
       ]);
       schemaData.programme_templates = templatesData;
-      setRootSchema(schemaData);
       setExLib(exercisesData);
+
+      // Recover work the last visit couldn't push. A pending snapshot only
+      // survives because the server never confirmed it, so it is the newer copy
+      // — adopt it, re-queue the push, and say so rather than silently
+      // reverting to the server's version (which is how sessions "vanished").
+      const stored = readPendingSchema();
+      // Identical signature means the push landed and only its response was
+      // lost — nothing to recover, so drop the mirror quietly.
+      if (stored && schemaSignature(stored.schema) === schemaSignature(schemaData)) {
+        clearPendingSchema();
+        setRootSchema(schemaData);
+      } else if (stored) {
+        const local = { ...stored.schema, programme_templates: templatesData };
+        setRootSchema(local);
+        queueSchema(local);
+        setRecovery({
+          savedAt: stored.savedAt,
+          serverSchema: schemaData,
+          extraSessions: (local.workout_sessions?.length || 0) - (schemaData.workout_sessions?.length || 0),
+        });
+      } else {
+        setRootSchema(schemaData);
+      }
     } catch (err) {
       console.error("Failed to load data:", err);
     }
   }
 
+  // Discard the recovered local copy and go back to the server's version.
+  function useServerCopy() {
+    if (!recovery?.serverSchema) return;
+    clearPendingSchema();
+    setRootSchema(recovery.serverSchema);
+    setRecovery(null);
+  }
+
   async function handleLogin(loggedInUser) {
     setUser(loggedInUser);
+    setSyncOwner(loggedInUser?.id);
     setLoading(true);
     await loadAppData();
     setLoading(false);
   }
 
   async function handleLogout() {
+    // Last chance to get anything unsynced onto the server while we still hold a
+    // token; whatever doesn't make it stays mirrored under this account's id.
+    try { await flushSchema(); } catch { /* ignore */ }
     try { await api.auth.logout(); } catch { /* ignore */ }
     api.clearToken();
-    setUser(null); setRootSchema(null); setExLib(null);
+    setSyncOwner(null);
+    setUser(null); setRootSchema(null); setExLib(null); setRecovery(null);
   }
 
+  // Every schema change goes through the sync queue: mirrored to localStorage
+  // immediately, then pushed with retries until the server confirms it.
   function updateSchema(newSchema) {
     setRootSchema(newSchema);
-    api.data.putSchema(newSchema).catch(err => console.error("Schema sync failed:", err));
+    queueSchema(newSchema);
   }
   function updateExLib(newLib) {
     setExLib(newLib);
@@ -3769,6 +4040,7 @@ export default function App() {
       <header style={S.header}>
         <span style={S.headerLogo}>Powerlift</span>
         <div style={S.headerActions}>
+          <SyncPill syncState={syncState} onRetry={flushSchema} />
           <button style={S.headerBtn} onClick={() => setThemeOverride(isDark ? "light" : "dark")} title="Toggle theme">
             {isDark ? "○" : "●"}
           </button>
@@ -3787,6 +4059,9 @@ export default function App() {
       {/* ── Main content ───────────────────────────────────────────────────── */}
       <div style={S.main}>
         <div style={S.content}>
+          {recovery && (
+            <RecoveryBanner recovery={recovery} onKeep={() => setRecovery(null)} onUseServer={useServerCopy} />
+          )}
           {/* SessionRunner always mounted to preserve in-session state */}
           <div style={{ display: activeTab === "session" ? "block" : "none" }}>
             <SessionRunner
