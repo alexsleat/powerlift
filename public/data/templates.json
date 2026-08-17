@@ -195,11 +195,11 @@
     },
     {
       "id": "531_anchor_351_fsl",
-      "name": "5/3/1 - Anchor - 3/5/1 + FSL",
+      "name": "5/3/1 - Anchor - 5/3/1 + FSL",
       "author": "Jim Wendler",
       "experience_level": ["intermediate", "advanced"],
       "days_per_week": 4,
-      "description": "3-week Anchor phase using 3/5/1 sequence. PR sets on Weeks 1 and 3. Week 2 is a volume buffer (no PR). Supplemental volume reduced to 3x5 FSL to dissipate fatigue. Refreshed assistance with added arm hypertrophy.",
+      "description": "3-week Anchor phase using the standard 5/3/1 wave: Week 1 fives, Week 2 threes, Week 3 5/3/1. PR (AMRAP) set on the final main set of every week. Supplemental volume reduced to 3x5 FSL to dissipate fatigue. Refreshed assistance with added arm hypertrophy.",
       "progression_model": {
         "type": "training_max",
         "initial_tm_percentage": 0.90,
@@ -224,7 +224,22 @@
         "wave_weeks": [
           {
             "week": 1,
-            "week_label": "Week 1 (3s Week + PR)",
+            "week_label": "Week 1 (5s Week + PR)",
+            "warmup_sets": [
+              { "tm_pct": 0.40, "reps": 5 },
+              { "tm_pct": 0.50, "reps": 5 },
+              { "tm_pct": 0.60, "reps": 3 }
+            ],
+            "core_sets": [
+              { "tm_pct": 0.65, "reps": 5 },
+              { "tm_pct": 0.75, "reps": 5 },
+              { "tm_pct": 0.85, "reps": "amrap", "amrap_minimum": 5 }
+            ],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.65 }
+          },
+          {
+            "week": 2,
+            "week_label": "Week 2 (3s Week + PR)",
             "warmup_sets": [
               { "tm_pct": 0.40, "reps": 5 },
               { "tm_pct": 0.50, "reps": 5 },
@@ -236,21 +251,6 @@
               { "tm_pct": 0.90, "reps": "amrap", "amrap_minimum": 3 }
             ],
             "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.70 }
-          },
-          {
-            "week": 2,
-            "week_label": "Week 2 (5s Week - No PR)",
-            "warmup_sets": [
-              { "tm_pct": 0.40, "reps": 5 },
-              { "tm_pct": 0.50, "reps": 5 },
-              { "tm_pct": 0.60, "reps": 3 }
-            ],
-            "core_sets": [
-              { "tm_pct": 0.65, "reps": 5 },
-              { "tm_pct": 0.75, "reps": 5 },
-              { "tm_pct": 0.85, "reps": 5 }
-            ],
-            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.65 }
           },
           {
             "week": 3,

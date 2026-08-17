@@ -2,6 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "./api.js";
 import AuthPage from "./AuthPage.jsx";
 
+// ─── APP VERSION ────────────────────────────────────────────────────────────
+// ⚠️ BUMP THIS on every user-facing change (shown on the Settings page so it's
+// obvious which build is deployed). ANY coder or agent editing this app MUST
+// update it — use semver: patch = fix, minor = feature, major = breaking.
+export const APP_VERSION = "1.3.0";
+
 // ─── THEME ────────────────────────────────────────────────────────────────────
 
 const MONO_FONT = "ui-monospace,'SFMono-Regular','SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
@@ -147,6 +153,10 @@ function calcWarmupSets(working, bar, maxSets) {
 }
 
 function epley(w, r) { return r === 1 ? w : Math.round(w * (1 + r / 30) * 10) / 10; }
+// Inverse Epley: expected weight for `r` reps given an estimated 1RM.
+function weightForReps(e1rm, r) { return r <= 1 ? e1rm : Math.round((e1rm / (1 + r / 30)) * 10) / 10; }
+// ISO date `days` before today (for time-windowed personal records).
+function daysAgoISO(days) { const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split("T")[0]; }
 
 function getExercise(id, rootSchema, exLib) {
   return exLib?.exercises?.find(e => e.id === id)
@@ -867,7 +877,7 @@ function BarChart({ bars, color }) {
 
 // ─── PLATE CALCULATOR ─────────────────────────────────────────────────────────
 
-function PlateCalculator({ units, sessionContext }) {
+function PlateCalculator({ units, sessionContext, embedded }) {
   const defTarget = sessionContext?.weight ?? (units === "lb" ? 225 : 100);
   const defBar    = units === "lb" ? 45 : 20;
   const [target, setTarget] = useState(defTarget);
@@ -882,7 +892,7 @@ function PlateCalculator({ units, sessionContext }) {
 
   return (
     <div>
-      <div style={S.h1}>Plate Calculator</div>
+      {!embedded && <div style={S.h1}>Plate Calculator</div>}
 
       {sessionContext?.exName && (
         <div style={{ ...S.card, borderColor: "var(--accent-dim)", marginBottom: "12px" }}>
@@ -963,6 +973,187 @@ function PlateCalculator({ units, sessionContext }) {
             <div style={{ color: "var(--text-dim)", fontSize: "15px" }}>Target must exceed bar weight.</div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CALCULATORS PAGE ─────────────────────────────────────────────────────────
+// Standalone tools that never touch the user's logs: 1RM (Epley) estimator with
+// %1RM and rep-max tables, plate loading, Wilks/DOTS, and unit conversion.
+function CalcPage({ units, sessionContext }) {
+  const [sub, setSub] = useState("1rm");
+  return (
+    <div>
+      <div style={S.h1}>Calculators</div>
+      <div style={S.subNav}>
+        {[["1rm", "1RM"], ["plates", "Plates"], ["score", "Wilks / DOTS"], ["convert", "Convert"]].map(([id, label]) => (
+          <button key={id} style={S.btn(sub === id ? "active" : "default")} onClick={() => setSub(id)}>{label}</button>
+        ))}
+      </div>
+      {sub === "1rm"     && <OneRmCalc units={units} />}
+      {sub === "plates"  && <PlateCalculator units={units} sessionContext={sessionContext} embedded />}
+      {sub === "score"   && <ScoreCalc units={units} />}
+      {sub === "convert" && <ConvertCalc />}
+    </div>
+  );
+}
+
+function OneRmCalc({ units }) {
+  const [weight, setWeight] = useState(units === "lb" ? 100 : 60);
+  const [reps,   setReps]   = useState(5);
+  const wKg   = toKg(parseFloat(weight) || 0, units);
+  const nReps = Math.max(1, Math.round(parseFloat(reps) || 0));
+  const e1rm  = wKg > 0 && nReps >= 1 ? epley(wKg, nReps) : null;
+
+  const pcts       = [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50];
+  const repTargets = [1, 2, 3, 5, 8, 10, 12];
+
+  return (
+    <>
+      <div style={S.card}>
+        <div style={S.cardBody}>
+          <div style={{ ...S.grid2, marginBottom: "16px" }}>
+            <div>
+              <label style={S.label}>Weight ({units})</label>
+              <input style={S.input} type="number" inputMode="decimal" step={units === "lb" ? "5" : "2.5"}
+                value={weight} onChange={e => setWeight(e.target.value)} />
+            </div>
+            <div>
+              <label style={S.label}>Reps</label>
+              <input style={S.input} type="number" inputMode="numeric" step="1" min="1"
+                value={reps} onChange={e => setReps(e.target.value)} />
+            </div>
+          </div>
+          {e1rm ? (
+            <div style={{ textAlign: "center", padding: "6px 0 2px" }}>
+              <div style={S.label}>Estimated 1RM</div>
+              <div style={{ fontSize: "34px", fontWeight: "800", color: "var(--accent)", fontFamily: FONT }}>{fmtW(e1rm, units)}</div>
+              <div style={{ color: "var(--text-dim)", fontSize: "12px", marginTop: "6px", lineHeight: "1.5" }}>
+                Epley formula: 1RM = weight × (1 + reps ÷ 30).
+                {nReps > 12 && <span style={{ color: "var(--warning)" }}> Less reliable above ~12 reps.</span>}
+              </div>
+            </div>
+          ) : <div style={{ color: "var(--text-dim)", fontSize: "15px" }}>Enter a weight and reps.</div>}
+        </div>
+      </div>
+
+      {e1rm && (
+        <>
+          <div style={S.card}>
+            <div style={S.cardHead}><span style={S.h3}>Training % of 1RM</span></div>
+            <div style={{ ...S.cardBody, padding: "0" }}>
+              <table style={S.table}>
+                <tbody>
+                  {pcts.map(p => (
+                    <tr key={p}>
+                      <td style={{ ...S.td, color: "var(--text-muted)", width: "40%" }}>{p}%</td>
+                      <td style={{ ...S.td, textAlign: "right", fontWeight: "700" }}>{fmtW(roundToNearest(e1rm * p / 100, 2.5), units)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={S.card}>
+            <div style={S.cardHead}><span style={S.h3}>Predicted rep maxes</span></div>
+            <div style={{ ...S.cardBody, padding: "0" }}>
+              <table style={S.table}>
+                <tbody>
+                  {repTargets.map(r => (
+                    <tr key={r}>
+                      <td style={{ ...S.td, color: "var(--text-muted)", width: "40%" }}>{r} rep{r > 1 ? "s" : ""} ({r}RM)</td>
+                      <td style={{ ...S.td, textAlign: "right", fontWeight: "700" }}>{fmtW(roundToNearest(weightForReps(e1rm, r), 2.5), units)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function ScoreCalc({ units }) {
+  const [sq, setSq] = useState(units === "lb" ? 300 : 140);
+  const [bp, setBp] = useState(units === "lb" ? 200 : 90);
+  const [dl, setDl] = useState(units === "lb" ? 400 : 180);
+  const [bw, setBw] = useState(units === "lb" ? 180 : 82);
+
+  const totalKg = toKg(parseFloat(sq) || 0, units) + toKg(parseFloat(bp) || 0, units) + toKg(parseFloat(dl) || 0, units);
+  const bwKg    = toKg(parseFloat(bw) || 0, units);
+  const wilks   = wilksScore(totalKg, bwKg);
+  const dots    = dotsScore(totalKg, bwKg);
+
+  const field = (label, val, set) => (
+    <div>
+      <label style={S.label}>{label} ({units})</label>
+      <input style={S.input} type="number" inputMode="decimal" step={units === "lb" ? "5" : "2.5"}
+        value={val} onChange={e => set(e.target.value)} />
+    </div>
+  );
+
+  return (
+    <>
+      <div style={S.card}>
+        <div style={S.cardBody}>
+          <div style={{ ...S.grid2, marginBottom: "12px" }}>
+            {field("Squat", sq, setSq)}
+            {field("Bench", bp, setBp)}
+            {field("Deadlift", dl, setDl)}
+            {field("Bodyweight", bw, setBw)}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+            <span style={S.h3}>Total</span>
+            <span style={{ ...S.mono, fontSize: "18px" }}>{fmtW(roundToNearest(totalKg, 2.5), units)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={S.card}>
+        <div style={S.cardBody}>
+          <div style={{ display: "flex", justifyContent: "space-around", textAlign: "center" }}>
+            <div>
+              <div style={S.label}>Wilks</div>
+              <div style={{ fontSize: "28px", fontWeight: "800", color: "var(--accent)", fontFamily: FONT }}>{wilks ?? "—"}</div>
+            </div>
+            <div>
+              <div style={S.label}>DOTS</div>
+              <div style={{ fontSize: "28px", fontWeight: "800", color: "var(--accent)", fontFamily: FONT }}>{dots ?? "—"}</div>
+            </div>
+          </div>
+          <div style={{ color: "var(--text-dim)", fontSize: "12px", marginTop: "12px", lineHeight: "1.5" }}>
+            Wilks (2017) and DOTS are relative-strength scores that normalise your total against bodyweight.
+            These use <b>male</b> coefficients — female coefficients aren't applied yet, so scores for female lifters will read low.
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ConvertCalc() {
+  const [kg, setKg] = useState(100);
+  const [lb, setLb] = useState(Math.round(100 * 2.2046 * 100) / 100);
+  const onKg = v => { setKg(v); const n = parseFloat(v); setLb(isNaN(n) ? "" : Math.round(n * 2.2046 * 100) / 100); };
+  const onLb = v => { setLb(v); const n = parseFloat(v); setKg(isNaN(n) ? "" : Math.round((n / 2.2046) * 100) / 100); };
+  return (
+    <div style={S.card}>
+      <div style={S.cardBody}>
+        <div style={{ ...S.grid2 }}>
+          <div>
+            <label style={S.label}>Kilograms</label>
+            <input style={S.input} type="number" inputMode="decimal" step="0.5" value={kg} onChange={e => onKg(e.target.value)} />
+          </div>
+          <div>
+            <label style={S.label}>Pounds</label>
+            <input style={S.input} type="number" inputMode="decimal" step="1" value={lb} onChange={e => onLb(e.target.value)} />
+          </div>
+        </div>
+        <div style={{ color: "var(--text-dim)", fontSize: "12px", marginTop: "12px" }}>1 kg = 2.2046 lb</div>
       </div>
     </div>
   );
@@ -1082,6 +1273,39 @@ function getBest10rm(exerciseId, sessions) {
   return best;
 }
 
+// Best estimated 1RM (and the set behind it) for a lift's main sets, optionally
+// within a date window (sinceDate inclusive). Used by the time-windowed PRs view.
+function bestE1rmSet(exerciseId, sessions, sinceDate) {
+  let best = null;
+  (sessions || []).forEach(session => {
+    if (sinceDate && (session.date || "") < sinceDate) return;
+    (session.exercises_performed || []).forEach(ex => {
+      if (ex.exercise_id !== exerciseId || ex.role !== "main") return;
+      (ex.set_results || []).forEach(s => {
+        if (s.is_warmup || !(s.reps_completed > 0) || !(s.weight_kg > 0)) return;
+        const e1rm = epley(s.weight_kg, s.reps_completed);
+        if (!best || e1rm > best.e1rm)
+          best = { e1rm, weight_kg: s.weight_kg, reps: s.reps_completed, date: session.date, sessionId: session.id };
+      });
+    });
+  });
+  return best;
+}
+
+// Is this a deload session? Deload weeks use intentionally light main sets, so
+// they must not drag down the "current estimate" (a light session is not a drop
+// in strength). Prefers the persisted flag (new sessions); falls back to the
+// programme template's week definitions for sessions saved before the flag.
+function isDeloadSession(session, rootSchema) {
+  if (session?.is_deload != null) return !!session.is_deload;
+  const inst = (rootSchema.programme_instances || []).find(i => i.id === session?.programme_instance_id);
+  const tmpl = inst && (rootSchema.programme_templates || []).find(t => t.id === inst.template_id);
+  const ph   = tmpl?.phases?.[0];
+  if (!ph || session?.week == null) return false;
+  const weeks = ph.wave_weeks || ph.leviathan_weeks;
+  return !!weeks?.find(w => w.week === session.week)?.is_deload;
+}
+
 function ProgressView({ rootSchema, units, onNavigateToSession }) {
   const [sub, setSub]           = useState("lifts");
   const [e1rmVisible, setE1rmVisible] = useState({});
@@ -1091,6 +1315,10 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
   const pfLifts   = ["ex_squat", "ex_bench", "ex_deadlift"]; // for total/Wilks/DOTS
   const sessions  = rootSchema.workout_sessions || [];
   const bwKg      = rootSchema.user_profile?.bodyweight_kg || null;
+
+  // Sessions whose main work was a deload — excluded from the current estimate
+  // so a light week doesn't read as a strength drop.
+  const deloadIds = new Set((sessions || []).filter(s => isDeloadSession(s, rootSchema)).map(s => s.id));
 
   // Per-lift data — one point per session from main sets only
   const liftData = mainLifts.map(id => {
@@ -1107,7 +1335,9 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
     const bestKg    = bestSets.length ? Math.max(...bestSets.map(s => s.e1rm)) : null;
     const bestEntry = bestKg != null ? bestSets.find(s => s.e1rm === bestKg) : null;
     const bestDate  = bestEntry?.date || null;
-    const currentKg = estimateCurrentE1rmFromSets(bestSets);
+    // Estimate from non-deload sessions only (fall back to all if that's all we have).
+    const workingSets = bestSets.filter(s => !deloadIds.has(s.sessionId));
+    const currentKg = estimateCurrentE1rmFromSets(workingSets.length ? workingSets : bestSets);
     const best10rm  = getBest10rm(id, sessions);
 
     return { id, ...LIFT_META[id], points, bestKg, bestDate, bestEntry, currentKg, best10rm };
@@ -1149,13 +1379,56 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
       <div style={S.h1}>Stats</div>
       <div style={S.subNav}>
         <button style={S.btn(sub === "lifts"  ? "active" : "default")} onClick={() => setSub("lifts")}>Lifts</button>
+        <button style={S.btn(sub === "prs"    ? "active" : "default")} onClick={() => setSub("prs")}>PRs</button>
         <button style={S.btn(sub === "totals" ? "active" : "default")} onClick={() => setSub("totals")}>Totals</button>
         <button style={S.btn(sub === "volume" ? "active" : "default")} onClick={() => setSub("volume")}>Volume</button>
       </div>
 
+      {/* ── PRs tab (time-windowed bests) ── */}
+      {sub === "prs" && (
+        <>
+          <div style={{ color: "var(--text-dim)", fontSize: "13px", marginBottom: "12px", lineHeight: "1.5" }}>
+            Best <b>estimated 1RM</b> from your main sets in each window, via the <b>Epley</b> formula
+            (1RM = weight × (1 + reps ÷ 30)). These are calculated from your best set — not necessarily a weight lifted for a true single.
+          </div>
+          {(() => {
+            const windows = [["30 days", daysAgoISO(30)], ["90 days", daysAgoISO(90)], ["6 months", daysAgoISO(182)], ["12 months", daysAgoISO(365)], ["All-time", null]];
+            const cards = mainLifts.map(id => {
+              const rows = windows.map(([label, since]) => ({ label, best: bestE1rmSet(id, sessions, since) }));
+              if (!rows.some(r => r.best)) return null;
+              return (
+                <div key={id} style={S.card}>
+                  <div style={S.cardHead}><span style={{ color: LIFT_META[id]?.color, fontWeight: "700", fontSize: "16px" }}>{LIFT_META[id]?.name || id}</span></div>
+                  <div style={{ ...S.cardBody, padding: "0" }}>
+                    <table style={S.table}>
+                      <thead><tr><th style={S.th}>Window</th><th style={{ ...S.th, textAlign: "right" }}>Est. 1RM</th><th style={{ ...S.th, textAlign: "right" }}>Best set</th></tr></thead>
+                      <tbody>
+                        {rows.map(r => (
+                          <tr key={r.label}>
+                            <td style={{ ...S.td, color: "var(--text-muted)" }}>{r.label}</td>
+                            <td style={{ ...S.td, textAlign: "right", fontWeight: "700" }}>{r.best ? fmtW(r.best.e1rm, units) : "—"}</td>
+                            <td style={{ ...S.td, textAlign: "right", color: "var(--text-muted)", fontSize: "13px" }}>
+                              {r.best ? `${fmtW(r.best.weight_kg, units)} × ${r.best.reps}` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            }).filter(Boolean);
+            return cards.length ? cards : <div style={{ color: "var(--text-dim)", fontSize: "15px" }}>No main-lift sets logged yet.</div>;
+          })()}
+        </>
+      )}
+
       {/* ── Lifts tab ── */}
       {sub === "lifts" && (
         <>
+          <div style={{ color: "var(--text-dim)", fontSize: "13px", marginBottom: "12px", lineHeight: "1.5" }}>
+            "Best 1RM" and "Est. now" are <b>estimated</b> 1-rep maxes (Epley: weight × (1 + reps ÷ 30)) — deloads are excluded from the estimate.
+          </div>
           {liftData.map(lift => {
             const showE1rm = !!e1rmVisible[lift.id];
             return (
@@ -1319,6 +1592,10 @@ function ProgressView({ rootSchema, units, onNavigateToSession }) {
                 {!bwKg && (
                   <div style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: "8px" }}>Wilks / DOTS require bodyweight</div>
                 )}
+                <div style={{ color: "var(--text-dim)", fontSize: "12px", marginTop: "10px", lineHeight: "1.5" }}>
+                  <b>Best</b> = highest estimated 1RM ever (Epley from your best set — a calculated 1RM, not a weight you necessarily lifted for a single).
+                  {" "}<b>Est.</b> = recency-weighted estimate from recent working sessions (deloads excluded).
+                </div>
               </div>
             </div>
           </div>
@@ -1926,7 +2203,10 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
           onConfirm={(kg) => { updateTM(editTmModal.instId, editTmModal.exId, kg); setEditTmModal(null); }}
         />
       )}
-      <div style={S.h1}>Settings</div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div style={S.h1}>Settings</div>
+        <span style={{ color: "var(--text-dim)", fontSize: "13px", fontFamily: MONO_FONT }}>v{APP_VERSION}</span>
+      </div>
       <div style={S.subNav}>
         {[["setup","Setup"],["programmes","Programmes"],["library","Library"],["json","Raw JSON"]].map(([id,label]) => (
           <button key={id} style={S.btn(sub === id ? "active" : "default")} onClick={() => setSub(id)}>{label}</button>
@@ -3353,6 +3633,8 @@ export default function App() {
       start_time: sessionTime || new Date().toTimeString().slice(0, 5),
       duration_minutes: sessionDurationMins ?? null,
       cycle_role: plan.role, cycle: inst?.current_cycle,
+      // Flag deload sessions so stats can exclude them from the current estimate.
+      is_deload: !!plan.exercises?.some(e => e.label === "Deload"),
       week: plan.week, day: plan.day, notes, exercises_performed: exercisesPerformed
     };
 
@@ -3403,7 +3685,7 @@ export default function App() {
     { id: "session",  icon: "▶",  label: "Run"      },
     { id: "history",  icon: "≡",  label: "History"  },
     { id: "progress", icon: "↗",  label: "Stats"    },
-    { id: "plates",   icon: "⊞",  label: "Plates"   },
+    { id: "calc",     icon: "🖩",  label: "Calc"     },
     { id: "settings", icon: "⚙",  label: "Settings" },
   ];
 
@@ -3447,7 +3729,7 @@ export default function App() {
 
           {activeTab === "history"  && <HistoryTab rootSchema={rootSchema} exLib={exLib} onEditSession={s => { setEditingSession(s); setActiveTab("session"); }} onDeleteSession={handleDeleteSession} highlightSession={highlightSession} onHighlightClear={() => setHighlightSession(null)} />}
           {activeTab === "progress" && <ProgressView rootSchema={rootSchema} units={units} onNavigateToSession={handleNavigateToSession} />}
-          {activeTab === "plates"   && <PlateCalculator units={units} sessionContext={sessionContext} />}
+          {activeTab === "calc"     && <CalcPage units={units} sessionContext={sessionContext} />}
           {activeTab === "settings" && (
             <SettingsTab
               rootSchema={rootSchema} exLib={exLib}
