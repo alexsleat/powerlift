@@ -112,12 +112,15 @@ function seedIfNeeded() {
   const exPath = path.join(__dirname, '..', 'public', 'data', 'exercise.json');
   const tmPath = path.join(__dirname, '..', 'public', 'data', 'templates.json');
 
-  const count = db.prepare('SELECT COUNT(*) as c FROM exercises').get().c;
-  if (count === 0 && fs.existsSync(exPath)) {
+  // The exercises table holds the shared built-in library only — per-user edits
+  // live in user_exlib / custom_exercises — so upsert on every boot (like
+  // templates) instead of seeding once. Without this, library entries added to
+  // exercise.json after first launch never reach an existing deployment.
+  if (fs.existsSync(exPath)) {
     const exercises = JSON.parse(fs.readFileSync(exPath, 'utf8')).exercises || [];
-    const insert = db.prepare('INSERT OR IGNORE INTO exercises (id, data) VALUES (?, ?)');
-    db.transaction(() => { for (const ex of exercises) insert.run(ex.id, JSON.stringify(ex)); })();
-    console.log(`Seeded ${exercises.length} exercises`);
+    const upsert = db.prepare('INSERT OR REPLACE INTO exercises (id, data) VALUES (?, ?)');
+    db.transaction(() => { for (const ex of exercises) upsert.run(ex.id, JSON.stringify(ex)); })();
+    console.log(`Upserted ${exercises.length} exercises`);
   }
 
   if (fs.existsSync(tmPath)) {

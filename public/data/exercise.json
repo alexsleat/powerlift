@@ -116,6 +116,34 @@
         "custom": false
       },
       {
+        "id": "ex_barbell_row", "name": "Barbell Row", "aliases": ["Bent-Over Row", "Pendlay Row", "BB Row"],
+        "category": "compound", "movement_pattern": "pull_horizontal",
+        "equipment": ["barbell"], "load_type": "barbell",
+        "is_compound": true, "is_unilateral": false, "is_competition_lift": false,
+        "difficulty": "intermediate", "typically_trained_as": "main",
+        "tags": ["barbell", "back", "upper_body"],
+        "muscles_primary": ["latissimus_dorsi", "rhomboids", "mid_trapezius"],
+        "muscles_secondary": ["biceps", "rear_deltoid", "erector_spinae"],
+        "muscles_stabiliser": ["core", "hamstrings", "grip"],
+        "muscle_map_ids": { "primary": ["lat_l","lat_r","trap_l","trap_r"], "secondary": ["bicep_l","bicep_r","erector_l","erector_r"], "stabiliser": ["core_anterior"] },
+        "instructions": {
+          "summary": "A bent-over barbell pull for back thickness, rowed from the floor or from a hinged hold.",
+          "setup": ["Bar over mid-foot, hip-width stance.", "Hinge to roughly parallel with the floor, back flat.", "Grip just outside shoulder width, overhand.", "Take the slack out of the bar before rowing."],
+          "execution": ["Brace the core and keep the torso angle fixed.", "Row the bar to the lower chest / upper abdomen.", "Lead with the elbows and squeeze the mid-back at the top.", "Lower under control to full arm extension."],
+          "common_errors": ["Torso rising through the rep to cheat the weight.", "Jerking the bar with the lower back.", "Rowing too high into the neck.", "Shortening the range at the bottom."],
+          "breathing_cue": "Brace at the hinge, exhale on the row.",
+          "safety_notes": ["Keep a neutral spine - reduce load if the back rounds.", "Rest the bar on the floor between reps if position degrades."],
+          "coaching_cues": ["Chest proud, back flat.", "Drive elbows to hips.", "Row to the belly button.", "Torso stays still."]
+        },
+        "media": { "youtube_url": null, "gif_url": null, "image_url": null, "thumbnail_url": null, "youtube_start_seconds": null, "media_type_available": [] },
+        "substitutes": [{ "exercise_id": "ex_single_arm_db_row", "reason": "No barbell available", "equipment_needed": ["dumbbell", "bench"] }, { "exercise_id": "ex_seated_cable_row", "reason": "Lower back cannot tolerate the hinge", "equipment_needed": ["cable_machine"] }],
+        "progressions": [{ "exercise_id": "ex_tbar_row", "description": "Allows heavier loading with chest support" }],
+        "regressions": [{ "exercise_id": "ex_hammer_row", "description": "Removes the need to hold the hinge position" }],
+        "tracking": { "tracks_side": false, "default_rep_range": [5, 10], "default_rest_seconds": 180, "suggested_warmup_sets": 3, "weight_increment_kg": 2.5, "rpe_typically_used": true, "note_prompt": null },
+        "contraindications": [{ "condition": "lower_back_injury", "severity": "caution", "note": "Use a chest-supported row instead to remove spinal load." }],
+        "custom": false
+      },
+      {
         "id": "ex_hammer_row", "name": "Hammer Strength Row", "aliases": ["Plate-Loaded Row", "Machine Row"],
         "category": "compound", "movement_pattern": "pull_horizontal",
         "equipment": ["hammer_strength_machine"], "load_type": "plate_loaded",

@@ -47,7 +47,7 @@
       "author": "Mehdi Hadim",
       "experience_level": ["beginner","early_intermediate"],
       "days_per_week": 3,
-      "description": "Linear progression alternating A/B full-body workouts. Add weight every session.",
+      "description": "Linear progression alternating A/B full-body workouts. A: Squat, Bench, Barbell Row. B: Squat, OHP, Deadlift. Add weight every session.",
       "progression_model": {
         "type": "linear_weight",
         "increment_trigger": "on_success",
@@ -55,6 +55,7 @@
           { "exercise_id": "ex_squat", "increment_kg": 2.5 },
           { "exercise_id": "ex_bench", "increment_kg": 2.5 },
           { "exercise_id": "ex_deadlift", "increment_kg": 2.5 },
+          { "exercise_id": "ex_barbell_row", "increment_kg": 2.5 },
           { "exercise_id": "ex_ohp", "increment_kg": 1.25 }
         ],
         "failure_handling": { "repeat_weight_on_fail": true, "deload_after_consecutive_failures": 3, "deload_type": "percentage", "deload_percentage": 0.10, "deload_scope": "failed_lift_only", "manual_reset_allowed": true },
@@ -64,9 +65,9 @@
         "phase_id": "sl_main", "phase_number": 1, "name": "Main Phase", "typical_duration_weeks": null, "transition_rule": null,
         "workout_templates": {
           "A": [
-            { "exercise_id": "ex_squat",    "role": "main", "set_scheme_type": "across", "sets": 5, "reps": 5 },
-            { "exercise_id": "ex_bench",    "role": "main", "set_scheme_type": "across", "sets": 5, "reps": 5 },
-            { "exercise_id": "ex_deadlift", "role": "main", "set_scheme_type": "single_top_set", "sets": 1, "reps": 5 }
+            { "exercise_id": "ex_squat",       "role": "main", "set_scheme_type": "across", "sets": 5, "reps": 5 },
+            { "exercise_id": "ex_bench",       "role": "main", "set_scheme_type": "across", "sets": 5, "reps": 5 },
+            { "exercise_id": "ex_barbell_row", "role": "main", "set_scheme_type": "across", "sets": 5, "reps": 5 }
           ],
           "B": [
             { "exercise_id": "ex_squat",    "role": "main", "set_scheme_type": "across", "sets": 5, "reps": 5 },

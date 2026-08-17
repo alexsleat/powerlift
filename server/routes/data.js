@@ -208,14 +208,23 @@ router.put('/schema', (req, res) => {
 });
 
 // ── GET /api/data/exercises ───────────────────────────────────────────────────
-// Returns the user's saved exercise library, or the global seeded one.
+// Returns the user's saved exercise library, topped up with any built-ins it is
+// missing, or the global seeded library when the user has no saved copy.
 router.get('/exercises', (req, res) => {
-  const userId = parseInt(req.user.sub, 10);
-  const userLib = db.prepare('SELECT data FROM user_exlib WHERE user_id = ?').get(userId);
-  if (userLib) return res.json(JSON.parse(userLib.data));
+  const userId   = parseInt(req.user.sub, 10);
+  const rows     = db.prepare('SELECT data FROM exercises ORDER BY rowid').all();
+  const globalEx = rows.map(r => JSON.parse(r.data));
+  const userLib  = db.prepare('SELECT data FROM user_exlib WHERE user_id = ?').get(userId);
+  if (!userLib) return res.json({ exercises: globalEx });
 
-  const rows = db.prepare('SELECT data FROM exercises ORDER BY rowid').all();
-  res.json({ exercises: rows.map(r => JSON.parse(r.data)) });
+  // A saved library shadows the global one, so new built-ins would otherwise be
+  // invisible to anyone who has ever edited their library or restored a backup.
+  // Union in the built-ins their copy lacks; their own entries always win.
+  const lib = JSON.parse(userLib.data);
+  if (!Array.isArray(lib.exercises)) return res.json(lib);
+  const have    = new Set(lib.exercises.map(e => e.id));
+  const missing = globalEx.filter(e => !have.has(e.id));
+  res.json(missing.length ? { ...lib, exercises: [...lib.exercises, ...missing] } : lib);
 });
 
 // ── PUT /api/data/exlib ───────────────────────────────────────────────────────

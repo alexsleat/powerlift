@@ -235,6 +235,9 @@ const LIFT_META = {
   ex_deadlift: { name: "Deadlift", color: "#e06060" },
   ex_bench:    { name: "Bench",    color: "#60c060" },
   ex_ohp:      { name: "OHP",      color: "#c0c060" },
+  // Not charted on Stats (that list is the big four) — this is for the name and
+  // colour used by TM/working-weight readouts, since StrongLifts rows as a main.
+  ex_barbell_row: { name: "Barbell Row", color: "#b48ead" },
 };
 const DEFAULT_REST = { main: 180, supplemental: 150, assistance: 90 };
 
@@ -1658,6 +1661,36 @@ function BackupRestore({ rootSchema, exLib, onRestore }) {
   );
 }
 
+// ─── MACROCYCLE ROLE ROTATION (C4) ────────────────────────────────────────────
+// A template's macrocycle_structure.pattern lists its blocks in order — e.g.
+// leader, leader, 7th_week_deload, anchor. Only entries with a matching
+// cycle_roles definition can drive session building, so "7th_week_deload" is
+// skipped: it has no role config and every cycle already ends in a deload week.
+// current_macrocycle_block indexes the filtered list and wraps, giving a
+// repeating leader → leader → anchor rotation. Without this the role stayed on
+// whatever it was seeded with and the anchor was unreachable.
+function macrocycleRoles(tmpl) {
+  const pattern = tmpl?.macrocycle_structure?.pattern;
+  if (!Array.isArray(pattern) || !tmpl?.cycle_roles) return null;
+  const roles = pattern.filter(p => tmpl.cycle_roles[p]);
+  return roles.length ? roles : null;
+}
+
+function roleForBlock(tmpl, block) {
+  const roles = macrocycleRoles(tmpl);
+  if (!roles) return null;
+  return roles[(Math.max(1, block || 1) - 1) % roles.length];
+}
+
+// "Leader · block 2/3" for the position readouts — null for templates without roles.
+function blockLabel(inst, tmpl) {
+  const roles = macrocycleRoles(tmpl);
+  if (!roles || !inst?.current_cycle_role) return null;
+  const idx  = (Math.max(1, inst.current_macrocycle_block || 1) - 1) % roles.length;
+  const name = inst.current_cycle_role.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return `${name} · block ${idx + 1}/${roles.length}`;
+}
+
 // ─── SESSION PLAN BUILDER (module-level so preview helpers and edit loading can reuse it) ──
 
 function buildSessionPlan(inst, tmpl, rootSchema) {
@@ -1679,12 +1712,15 @@ function buildSessionPlan(inst, tmpl, rootSchema) {
         sets: waveWeek.deload_sets.map((s, i) => ({ setIndex: i, weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
     } else {
       const isAmrap    = roleConfig?.amrap_sets ?? true;
+      // 5s PRO runs every main set for 5 reps, not just the slot the wave marks
+      // AMRAP — so the 3s week and the 5/3/1 week flatten to 5s as well.
+      const isFivesPro = roleConfig?.main_set_variant === "5s_pro";
       const warmupObjs = waveWeek.warmup_sets
         ? waveWeek.warmup_sets.map(s => ({ weight: roundToNearest(s.tm_pct * tm, 2.5), reps: s.reps }))
         : calcWarmupSets(roundToNearest(waveWeek.core_sets[0].tm_pct * tm, 2.5), tmpl.warmup_protocol?.start_weight_kg ?? 20, tmpl.warmup_protocol?.max_warmup_sets ?? 3);
       const mainSets   = waveWeek.core_sets.map((s, i) => {
         const w    = roundToNearest(s.tm_pct * tm, 2.5);
-        const reps = s.reps === "amrap" && !isAmrap ? 5 : s.reps;
+        const reps = isFivesPro ? 5 : (s.reps === "amrap" && !isAmrap ? 5 : s.reps);
         return { setIndex: i, weight: w, reps, isAmrap: s.reps === "amrap" && isAmrap, amrap_minimum: s.amrap_minimum, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null };
       });
       exercises.push({ exercise_id: mainLift.exercise_id, role: "main",
@@ -1817,13 +1853,18 @@ function previewCycleSessions(inst, tmpl, rootSchema, count = 5) {
   const maxWeek = tmpl?.cycle_structure?.mesocycle_weeks || 3;
   const sessions = [];
   let d = inst.current_day, w = inst.current_week, c = inst.current_cycle;
+  // Track the macrocycle block too, so sessions previewed past a cycle boundary
+  // show the role they'll actually be run under (e.g. the anchor's AMRAP sets).
+  let b = inst.current_macrocycle_block || 1;
   for (let i = 0; i < count; i++) {
-    const fake = { ...inst, current_day: d, current_week: w, current_cycle: c };
+    const fake = { ...inst, current_day: d, current_week: w, current_cycle: c,
+      current_macrocycle_block: b,
+      current_cycle_role: roleForBlock(tmpl, b) || inst.current_cycle_role };
     const plan = buildSessionPlan(fake, tmpl, rootSchema);
     if (plan) sessions.push({ plan, isNext: i === 0 });
     d++;
     if (d > maxDay) { d = 1; w++; }
-    if (maxWeek && w > maxWeek) { w = 1; c++; }
+    if (maxWeek && w > maxWeek) { w = 1; c++; b++; }
   }
   return sessions;
 }
@@ -1836,6 +1877,14 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
   const fh            = tmpl?.progression_model?.failure_handling || {};
   const usesAmrapGate = fh.tm_reset_rule === "if_amrap_below_expected";
   const resetPct      = fh.tm_reset_percentage ?? 0.1;
+
+  // Some macrocycles only raise the TM after certain blocks (531_fsl:
+  // tm_increase_after ["leader","leader"]). When the block that just finished
+  // isn't listed — the anchor — hold the TMs and retest instead of incrementing.
+  const increaseAfter = tmpl?.macrocycle_structure?.tm_increase_after;
+  const completedRole = inst.tm_review_role ?? null;
+  const holdTm = Array.isArray(increaseAfter) && completedRole != null
+              && !increaseAfter.includes(completedRole);
 
   function getBestE1rm(exerciseId) {
     const entries = rootSchema.e1rm_log?.filter(e => e.exercise_id === exerciseId) || [];
@@ -1870,7 +1919,7 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
   const [newTMs, setNewTMs] = useState(() =>
     inst.training_maxes.map(tm => {
       const inc   = increments.find(li => li.exercises?.includes(tm.exercise_id) || li.exercise_id === tm.exercise_id);
-      const delta = inc?.increment_kg || 0;
+      const delta = holdTm ? 0 : (inc?.increment_kg || 0);
       const reset = amrapShortfall(tm.exercise_id);
       const new_kg = reset ? roundToNearest(tm.tm_kg * (1 - resetPct), 2.5) : tm.tm_kg + delta;
       return { exercise_id: tm.exercise_id, current_kg: tm.tm_kg, new_kg, reset };
@@ -1916,6 +1965,12 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
           <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "12px" }}>
             Tap New TM to edit. "Use e1RM" sets TM from your best estimated 1RM ({Math.round(tmPct * 100)}%).
           </div>
+          {holdTm && (
+            <div style={{ color: "var(--warning)", fontSize: "14px", marginBottom: "12px", fontWeight: "bold" }}>
+              {completedRole.replace(/_/g, " ")} block complete — this template raises TMs after {increaseAfter.join(" / ")} blocks only,
+              so these are held. Retest or run the 7th-week protocol, then set TMs from the result.
+            </div>
+          )}
           {newTMs.some(t => t.reset) && (
             <div style={{ color: "var(--danger)", fontSize: "14px", marginBottom: "12px", fontWeight: "bold" }}>
               ⚠ One or more lifts missed the AMRAP minimum last cycle — their TM is suggested down {Math.round(resetPct * 100)}% instead of up.
@@ -2090,7 +2145,8 @@ function NewProgrammePanel({ rootSchema, exLib, onChange }) {
       id: `prog_inst_${Date.now()}`, template_id: selectedId, status: "active",
       started_date: today,
       current_phase_id: tmpl.phases?.[0]?.phase_id || null,
-      current_cycle_role: selectedId === "531_fsl" ? "leader" : "standard",
+      // First block of the template's macrocycle pattern (leader for 531_fsl).
+      current_cycle_role: roleForBlock(tmpl, 1) || "standard",
       current_macrocycle_block: 1, current_cycle: 1, current_week: 1, current_day: 1,
       training_maxes, working_weights, failure_tracking: [], phase_history: [], needs_tm_review: false
     };
@@ -2331,7 +2387,10 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
                   <div style={{ ...S.flex, marginBottom: "10px", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
                     <div>
                       <div style={{ color: "var(--text)", fontWeight: "bold", fontSize: "16px" }}>{tmpl?.name || inst.template_id}</div>
-                      <div style={{ color: "var(--text-dim)", fontSize: "14px", marginTop: "2px" }}>Cycle {inst.current_cycle} · W{inst.current_week}D{inst.current_day}</div>
+                      <div style={{ color: "var(--text-dim)", fontSize: "14px", marginTop: "2px" }}>
+                        Cycle {inst.current_cycle} · W{inst.current_week}D{inst.current_day}
+                        {blockLabel(inst, tmpl) ? ` · ${blockLabel(inst, tmpl)}` : ""}
+                      </div>
                     </div>
                     <button style={S.btnSm("warning")} onClick={() => archiveInst(inst.id)}>Archive</button>
                   </div>
@@ -3133,7 +3192,10 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                     background: isSelected ? "var(--accent-dim)" : "var(--surface-2)",
                     border: `1px solid ${isSelected ? "var(--card-active-bdr)" : "var(--border)"}` }}>
                   <div style={{ fontWeight: "bold", color: "var(--text)", fontSize: "16px" }}>{t?.name || i.template_id}</div>
-                  <div style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>Cycle {i.current_cycle} · Week {i.current_week} · Day {i.current_day}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>
+                    Cycle {i.current_cycle} · Week {i.current_week} · Day {i.current_day}
+                    {blockLabel(i, t) ? ` · ${blockLabel(i, t)}` : ""}
+                  </div>
                 </div>
               );
             })}
@@ -3654,8 +3716,19 @@ export default function App() {
       const isTmBased = tmpl?.progression_model?.type === "training_max";
       const isLinear  = tmpl?.progression_model?.type === "linear_weight";
       const working_weights = isLinear ? updateLinearWeights(inst, tmpl, exercisesPerformed) : inst.working_weights;
+      // Advance the macrocycle block when a cycle closes so the role rotates
+      // (leader → leader → anchor …). tm_review_role records the block that just
+      // finished, which the TM review uses to honour tm_increase_after (C4).
+      const rotates = !!macrocycleRoles(tmpl) && cycleCompleted;
+      const current_macrocycle_block = rotates
+        ? (inst.current_macrocycle_block || 1) + 1
+        : inst.current_macrocycle_block;
+      const current_cycle_role = rotates
+        ? roleForBlock(tmpl, current_macrocycle_block)
+        : inst.current_cycle_role;
       newInsts = newInsts.map(i => i.id !== inst.id ? i : {
         ...i, current_day, current_week, current_cycle,
+        ...(rotates ? { current_macrocycle_block, current_cycle_role, tm_review_role: inst.current_cycle_role ?? null } : {}),
         ...(isLinear ? { working_weights } : {}),
         needs_tm_review: isTmBased && cycleCompleted ? true : (i.needs_tm_review || false)
       });

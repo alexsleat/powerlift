@@ -1,1 +1,2 @@
 - [Review remediation](review-remediation.md) — progress fixing database-branch code-review findings, batch by batch
+- [User training setup](user-training-setup.md) — Alex's live anchor cycle and the week-override workaround for programme position
