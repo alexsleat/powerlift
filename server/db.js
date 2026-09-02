@@ -108,6 +108,22 @@ db.exec(`
   );
 `);
 
+// ── Migrations ────────────────────────────────────────────────────────────────
+// CREATE TABLE IF NOT EXISTS can't add columns to an existing database, so
+// additive changes go here. Idempotent: checked against the live schema.
+function addColumnIfMissing(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (cols.some(c => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  console.log(`Migration: added ${table}.${column}`);
+}
+
+// Profile settings beyond the typed columns (theme, rep_ranges, history-strip
+// preferences…) were written by the client and then silently dropped, because
+// only the four typed columns were persisted and returned. Keep them in a JSON
+// blob alongside.
+addColumnIfMissing('user_profile', 'prefs', 'TEXT');
+
 function seedIfNeeded() {
   const exPath = path.join(__dirname, '..', 'public', 'data', 'exercise.json');
   const tmPath = path.join(__dirname, '..', 'public', 'data', 'templates.json');

@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "./api.js";
-import { queueSchema, readPendingSchema, clearPendingSchema, subscribeSync, flushSchema, schemaSignature, setSyncOwner } from "./sync.js";
+import {
+  setSyncOwner, cacheSchema, readCachedSchema, cacheStatic, readCachedStatic,
+  enqueue, flushOutbox, outboxCount, subscribeSync, discardOutbox,
+  failedOps, retryFailed, discardFailed,
+} from "./sync.js";
+import { diffSchemaOps } from "./schemaOps.js";
 import AuthPage from "./AuthPage.jsx";
 
 // ─── APP VERSION ────────────────────────────────────────────────────────────
 // ⚠️ BUMP THIS on every user-facing change (shown on the Settings page so it's
 // obvious which build is deployed). ANY coder or agent editing this app MUST
 // update it — use semver: patch = fix, minor = feature, major = breaking.
-export const APP_VERSION = "1.4.0";
+export const APP_VERSION = "1.5.0";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 
@@ -2041,48 +2046,71 @@ function TmReviewPanel({ inst, tmpl, units, rootSchema, onChange }) {
 }
 
 // ─── SYNC STATUS (Settings) ───────────────────────────────────────────────────
-// Shows whether the server actually has your data, the last error if not, and
-// how close the whole-schema payload is to the 2 MB request limit — the failure
-// mode you'd otherwise only notice as a session that "didn't save".
-const SCHEMA_LIMIT_BYTES = 2 * 1024 * 1024;
+// Whether the server actually has your data, what's still queued, and anything
+// it rejected outright — the failure you'd otherwise only notice as a session
+// that "didn't save".
+const OP_LABELS = {
+  'session.put':     "Session save",
+  'session.delete':  "Session delete",
+  'instance.put':    "Programme update",
+  'instance.delete': "Programme delete",
+  'profile.patch':   "Profile settings",
+  'liftmax.put':     "Lift max",
+  'liftmax.delete':  "Lift max removal",
+  'customex.put':    "Custom exercises",
+  'exlib.put':       "Exercise library",
+  'schema.put':      "Full restore",
+};
 
-function SyncStatusPanel({ rootSchema }) {
-  const [syncState, setSyncState] = useState({ status: 'idle', hasPending: false });
+function SyncStatusPanel() {
+  const [syncState, setSyncState] = useState({ status: 'idle', pending: 0, failed: 0 });
   useEffect(() => subscribeSync(setSyncState), []);
-
-  const bytes = (() => {
-    try { return new Blob([JSON.stringify({ ...rootSchema, programme_templates: undefined })]).size; }
-    catch { return null; }
-  })();
-  const pct = bytes ? Math.round((bytes / SCHEMA_LIMIT_BYTES) * 100) : null;
+  const failures = failedOps();
 
   const label = {
-    idle:     { text: "All changes saved to the server", color: "var(--success)" },
-    saving:   { text: "Saving…",                          color: "var(--text-muted)" },
-    retrying: { text: "Not saved — retrying",             color: "var(--warning)" },
-    offline:  { text: "Offline — saved on this device only", color: "var(--danger)" },
+    idle:     { text: "Everything is saved on the server",  color: "var(--success)" },
+    saving:   { text: `Sending ${syncState.pending}…`,      color: "var(--text-muted)" },
+    retrying: { text: `${syncState.pending} waiting to send — retrying`, color: "var(--warning)" },
+    offline:  { text: `Offline — ${syncState.pending} saved on this device`, color: "var(--warning)" },
+    failed:   { text: `${syncState.failed} change${syncState.failed === 1 ? "" : "s"} rejected`, color: "var(--danger)" },
   }[syncState.status] || { text: syncState.status, color: "var(--text-muted)" };
 
   return (
     <>
       <div style={{ color: label.color, fontSize: "15px", marginBottom: "6px", fontWeight: "600" }}>{label.text}</div>
-      <div style={{ color: "var(--text-dim)", fontSize: "13px", marginBottom: "4px" }}>
-        {syncState.lastSyncedAt ? `Last confirmed ${new Date(syncState.lastSyncedAt).toLocaleTimeString()}` : "Nothing sent yet this session"}
-        {bytes != null && ` · payload ${(bytes / 1024 / 1024).toFixed(2)} MB of 2 MB (${pct}%)`}
+      <div style={{ color: "var(--text-dim)", fontSize: "13px", marginBottom: "10px" }}>
+        {syncState.lastSyncedAt
+          ? `Last confirmed ${new Date(syncState.lastSyncedAt).toLocaleTimeString()}`
+          : "Nothing sent yet this session"}
+        {" · saves are per-session, so they don't grow with your history"}
       </div>
-      {syncState.lastError && (
-        <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "8px", fontFamily: MONO_FONT }}>
-          {syncState.lastError} · {syncState.attempt} failed {syncState.attempt === 1 ? "attempt" : "attempts"}
+      {syncState.lastError && syncState.status !== 'idle' && (
+        <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "10px", fontFamily: MONO_FONT }}>
+          {syncState.lastError}{syncState.attempt ? ` · ${syncState.attempt} failed ${syncState.attempt === 1 ? "attempt" : "attempts"}` : ""}
         </div>
       )}
-      {pct != null && pct >= 80 && (
-        <div style={{ color: "var(--warning)", fontSize: "13px", marginBottom: "8px" }}>
-          ⚠ Close to the request size limit. Past it, every save is rejected — back up and prune old sessions.
+      {failures.length > 0 && (
+        <div style={{ marginBottom: "12px" }}>
+          <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "6px" }}>
+            The server refused these outright — they stay on this device until you retry or discard them:
+          </div>
+          <table style={S.table}>
+            <tbody>
+              {failures.slice(0, 10).map((f, i) => (
+                <tr key={i}>
+                  <td style={S.td}>{OP_LABELS[f.kind] || f.kind}</td>
+                  <td style={{ ...S.td, color: "var(--text-dim)", fontSize: "12px", fontFamily: MONO_FONT }}>{f.error}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-      {syncState.hasPending && (
-        <button style={S.btn("warning")} onClick={flushSchema}>Retry now</button>
-      )}
+      <div style={{ ...S.flex, flexWrap: "wrap" }}>
+        {syncState.pending > 0 && <button style={S.btn("warning")} onClick={flushOutbox}>Send now</button>}
+        {failures.length > 0 && <button style={S.btn("active")} onClick={() => { retryFailed(); }}>Retry rejected</button>}
+        {failures.length > 0 && <button style={S.btn("danger")} onClick={() => { discardFailed(); }}>Discard rejected</button>}
+      </div>
     </>
   );
 }
@@ -2431,7 +2459,7 @@ function SettingsTab({ rootSchema, exLib, onChange, onExLibChange, onRestore, th
           </SchemaSection>
 
           <SchemaSection title="Sync">
-            <SyncStatusPanel rootSchema={rootSchema} />
+            <SyncStatusPanel />
           </SchemaSection>
 
           <SchemaSection title="Backup / Restore">
@@ -3727,21 +3755,23 @@ function HistoryTab({ rootSchema, exLib, onEditSession, onDeleteSession, highlig
 
 // ─── SYNC STATUS + RECOVERY ───────────────────────────────────────────────────
 
-// Header pill — silent when everything is on the server, visible (and tappable
-// to retry) the moment something isn't.
+// Header pill — silent when the server has everything, visible (and tappable to
+// retry) the moment it doesn't.
 function SyncPill({ syncState, onRetry }) {
-  const { status, attempt } = syncState;
+  const { status, pending, failed, attempt } = syncState;
   if (status === 'idle') return null;
 
   const look = {
-    saving:   { text: "⟳ saving",  color: "var(--text-dim)", border: "var(--border)"      },
-    retrying: { text: "⚠ unsaved", color: "var(--warning)",  border: "var(--warning-dim)" },
-    offline:  { text: "⚠ offline", color: "var(--danger)",   border: "var(--danger-dim)"  },
+    saving:   { text: `⟳ ${pending}`,   color: "var(--text-dim)", border: "var(--border)"      },
+    retrying: { text: `⚠ ${pending}`,   color: "var(--warning)",  border: "var(--warning-dim)" },
+    offline:  { text: `⚠ offline`,      color: "var(--warning)",  border: "var(--warning-dim)" },
+    failed:   { text: `✕ ${failed}`,    color: "var(--danger)",   border: "var(--danger-dim)"  },
   }[status] || { text: "⟳", color: "var(--text-dim)", border: "var(--border)" };
 
-  const title = status === 'saving' ? "Saving to the server…"
-    : status === 'offline' ? "No connection — your work is saved on this device and will sync when you're back online."
-    : `Couldn't reach the server (${attempt} ${attempt === 1 ? "try" : "tries"}). Saved on this device; tap to retry now.`;
+  const title = status === 'saving'   ? `Sending ${pending} change${pending === 1 ? "" : "s"}…`
+    : status === 'offline'  ? `${pending} change${pending === 1 ? "" : "s"} saved on this device — will sync when you're back online.`
+    : status === 'failed'   ? `${failed} change${failed === 1 ? "" : "s"} were rejected by the server. See Settings → Sync.`
+    : `Couldn't reach the server (${attempt} ${attempt === 1 ? "try" : "tries"}). ${pending} change${pending === 1 ? "" : "s"} saved on this device; tap to retry now.`;
 
   return (
     <button style={{ ...S.headerBtn, color: look.color, borderColor: look.border }}
@@ -3753,20 +3783,35 @@ function SyncPill({ syncState, onRetry }) {
 
 function RecoveryBanner({ recovery, onKeep, onUseServer }) {
   const when = recovery.savedAt ? new Date(recovery.savedAt).toLocaleString() : "your last visit";
-  const extra = recovery.extraSessions;
+  const n = recovery.pending;
   return (
     <div style={{ ...S.card, borderColor: "var(--warning-dim)", marginBottom: "12px" }}>
       <div style={{ ...S.cardHead, background: "var(--warning-dim)" }}>
-        <span style={{ fontWeight: "bold", color: "var(--warning)", fontSize: "15px" }}>Unsaved work recovered</span>
+        <span style={{ fontWeight: "bold", color: "var(--warning)", fontSize: "15px" }}>Unsent changes restored</span>
       </div>
       <div style={S.cardBody}>
         <div style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "12px" }}>
-          Changes from {when} never reached the server, so they were restored from this device and are being re-sent.
-          {extra > 0 && ` Includes ${extra} session${extra === 1 ? "" : "s"} the server didn't have.`}
+          {n} change{n === 1 ? "" : "s"} from {when} never reached the server. They've been restored from this device
+          and are being sent now — nothing is lost, and you can carry on.
         </div>
         <div style={{ ...S.flex, flexWrap: "wrap" }}>
-          <button style={S.btn("success")} onClick={onKeep}>Keep this copy</button>
-          <button style={S.btn("ghost")}   onClick={onUseServer}>Discard — use server copy</button>
+          <button style={S.btn("success")} onClick={onKeep}>OK</button>
+          <button style={S.btn("ghost")}   onClick={onUseServer}>Discard them — use server copy</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Shown when the app opened without reaching the server at all.
+function OfflineBanner() {
+  return (
+    <div style={{ ...S.card, borderColor: "var(--warning-dim)", marginBottom: "12px" }}>
+      <div style={S.cardBody}>
+        <div style={{ color: "var(--warning)", fontSize: "14px", fontWeight: "600" }}>Working from cached data</div>
+        <div style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "4px" }}>
+          Couldn't reach the server, so this is your last synced copy. Anything you log is saved on this device and
+          sent automatically once you're back online.
         </div>
       </div>
     </div>
@@ -3785,9 +3830,10 @@ export default function App() {
   const [highlightSession,  setHighlightSession]  = useState(null); // id to scroll/highlight in history
   const [user,           setUser]           = useState(null);
   const [authChecked,    setAuthChecked]    = useState(false);
-  // Unsynced work recovered at load: { savedAt, serverSchema, extraSessions }
+  // Unsent work found at load: { savedAt, pending, serverSchema }
   const [recovery,       setRecovery]       = useState(null);
-  const [syncState,      setSyncState]      = useState({ status: 'idle', hasPending: false });
+  const [offlineData,    setOfflineData]    = useState(false);   // opened from cache
+  const [syncState,      setSyncState]      = useState({ status: 'idle', pending: 0, failed: 0 });
 
   useEffect(() => subscribeSync(setSyncState), []);
 
@@ -3836,41 +3882,46 @@ export default function App() {
       const [schemaData, exercisesData, templatesData] = await Promise.all([
         api.data.schema(), api.data.exercises(), api.data.templates(),
       ]);
-      schemaData.programme_templates = templatesData;
+      cacheStatic(exercisesData, templatesData);
       setExLib(exercisesData);
+      setOfflineData(false);
 
-      // Recover work the last visit couldn't push. A pending snapshot only
-      // survives because the server never confirmed it, so it is the newer copy
-      // — adopt it, re-queue the push, and say so rather than silently
-      // reverting to the server's version (which is how sessions "vanished").
-      const stored = readPendingSchema();
-      // Identical signature means the push landed and only its response was
-      // lost — nothing to recover, so drop the mirror quietly.
-      if (stored && schemaSignature(stored.schema) === schemaSignature(schemaData)) {
-        clearPendingSchema();
-        setRootSchema(schemaData);
-      } else if (stored) {
-        const local = { ...stored.schema, programme_templates: templatesData };
-        setRootSchema(local);
-        queueSchema(local);
-        setRecovery({
-          savedAt: stored.savedAt,
-          serverSchema: schemaData,
-          extraSessions: (local.workout_sessions?.length || 0) - (schemaData.workout_sessions?.length || 0),
-        });
+      // Unsent ops mean the cached schema is ahead of the server: show it, keep
+      // draining the queue, and say so. Every op is a small id-keyed upsert, so
+      // this converges instead of one side clobbering the other.
+      const pending = outboxCount();
+      const cached  = readCachedSchema();
+      if (pending > 0 && cached) {
+        setRootSchema({ ...cached.value, programme_templates: templatesData });
+        setRecovery({ savedAt: cached.savedAt, pending, serverSchema: { ...schemaData, programme_templates: templatesData } });
       } else {
+        schemaData.programme_templates = templatesData;
         setRootSchema(schemaData);
+        cacheSchema(schemaData);
       }
+      // Drain anything queued from a previous visit (no-op when empty).
+      flushOutbox();
     } catch (err) {
-      console.error("Failed to load data:", err);
+      // Server unreachable: open on the cached copy rather than a blank screen.
+      const cached = readCachedSchema();
+      const stat   = readCachedStatic();
+      if (cached && stat) {
+        setExLib(stat.exLib);
+        setRootSchema({ ...cached.value, programme_templates: stat.templates });
+        setOfflineData(true);
+        console.warn("Loaded from cache — server unreachable:", err?.message || err);
+      } else {
+        console.error("Failed to load data:", err);
+      }
     }
   }
 
-  // Discard the recovered local copy and go back to the server's version.
+  // Throw away unsent changes and take the server's version instead.
   function useServerCopy() {
     if (!recovery?.serverSchema) return;
-    clearPendingSchema();
+    discardOutbox();
     setRootSchema(recovery.serverSchema);
+    cacheSchema(recovery.serverSchema);
     setRecovery(null);
   }
 
@@ -3883,24 +3934,28 @@ export default function App() {
   }
 
   async function handleLogout() {
-    // Last chance to get anything unsynced onto the server while we still hold a
-    // token; whatever doesn't make it stays mirrored under this account's id.
-    try { await flushSchema(); } catch { /* ignore */ }
+    // Last chance to drain the outbox while we still hold a token; anything left
+    // stays queued under this account's id and goes out when they sign back in.
+    try { await flushOutbox(); } catch { /* ignore */ }
     try { await api.auth.logout(); } catch { /* ignore */ }
     api.clearToken();
     setSyncOwner(null);
-    setUser(null); setRootSchema(null); setExLib(null); setRecovery(null);
+    setUser(null); setRootSchema(null); setExLib(null); setRecovery(null); setOfflineData(false);
   }
 
-  // Every schema change goes through the sync queue: mirrored to localStorage
-  // immediately, then pushed with retries until the server confirms it.
+  // Single write path: cache the new state for offline use, then queue one small
+  // op per entity that actually changed (see schemaOps.js). Nothing here depends
+  // on how much history exists.
   function updateSchema(newSchema) {
+    const ops = diffSchemaOps(rootSchema, newSchema);
     setRootSchema(newSchema);
-    queueSchema(newSchema);
+    cacheSchema(newSchema);
+    ops.forEach(enqueue);
   }
   function updateExLib(newLib) {
     setExLib(newLib);
-    api.data.putExlib(newLib).catch(err => console.error("ExLib sync failed:", err));
+    cacheStatic(newLib, rootSchema?.programme_templates);
+    enqueue({ kind: 'exlib.put', key: 'exlib', payload: newLib });
   }
   function handleRestore(schema, lib) {
     schema.programme_templates = rootSchema.programme_templates;
@@ -4040,7 +4095,7 @@ export default function App() {
       <header style={S.header}>
         <span style={S.headerLogo}>Powerlift</span>
         <div style={S.headerActions}>
-          <SyncPill syncState={syncState} onRetry={flushSchema} />
+          <SyncPill syncState={syncState} onRetry={() => { retryFailed(); flushOutbox(); }} />
           <button style={S.headerBtn} onClick={() => setThemeOverride(isDark ? "light" : "dark")} title="Toggle theme">
             {isDark ? "○" : "●"}
           </button>
@@ -4059,6 +4114,7 @@ export default function App() {
       {/* ── Main content ───────────────────────────────────────────────────── */}
       <div style={S.main}>
         <div style={S.content}>
+          {offlineData && <OfflineBanner />}
           {recovery && (
             <RecoveryBanner recovery={recovery} onKeep={() => setRecovery(null)} onUseServer={useServerCopy} />
           )}

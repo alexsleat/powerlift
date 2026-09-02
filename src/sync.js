@@ -1,104 +1,103 @@
-// ─── SCHEMA SYNC QUEUE ────────────────────────────────────────────────────────
-// The schema PUT is a whole-document, last-write-wins upsert, so only the newest
-// snapshot ever matters. Every change is mirrored to localStorage first, then
-// pushed; a failed push is retried with backoff (and on reconnect / tab focus)
-// until the server confirms it. Previously the PUT was fire-and-forget: a
-// dropped request left the change in memory only, so completing a session and
-// then reloading silently reverted to the server's older copy.
+// ─── OFFLINE CACHE + WRITE OUTBOX ─────────────────────────────────────────────
+// Two separate jobs, deliberately kept apart:
+//
+//   1. Cache — the last known-good schema (plus exercise library and templates)
+//      mirrored to localStorage so the app opens and works with no connection.
+//      Read-only safety net; never the mechanism for saving.
+//
+//   2. Outbox — an append-only queue of small, idempotent write ops (one session,
+//      one instance, the profile…) flushed FIFO with retry and backoff. Each op
+//      is a bounded request that either lands or is retried, so saving no longer
+//      depends on shipping the entire document and can't be broken by history
+//      size. Ops are keyed, so re-editing the same entity replaces its pending
+//      op rather than queueing another.
+//
+// Ops that can never succeed (validation, ownership conflict) are moved to a
+// dead-letter list instead of blocking everything behind them, and surfaced in
+// Settings → Sync rather than failing silently.
 
 import { api } from './api.js';
 
-const PENDING_KEY = 'pl-pending-schema';
+const CACHE_KEY  = 'pl-schema-cache';
+const STATIC_KEY = 'pl-static-cache';
+const OUTBOX_KEY = 'pl-outbox';
+const FAILED_KEY = 'pl-outbox-failed';
 const MAX_BACKOFF = 60000;
 
-let pending  = null;    // newest snapshot the server has not confirmed
+let outbox   = [];
+let failed   = [];
 let inFlight = false;
 let attempt  = 0;
 let timer    = null;
-let lastError = null;
+let lastError    = null;
 let lastSyncedAt = null;
+let owner    = null;
+// Set if the server doesn't have the incremental routes (older build): every op
+// then degrades to a whole-schema PUT so a deploy skew can't lose writes.
+let incrementalUnsupported = false;
 
 const listeners = new Set();
 
+// ── Persistence helpers ───────────────────────────────────────────────────────
+
+function write(key, value) {
+  try { localStorage.setItem(key, JSON.stringify({ owner, savedAt: Date.now(), value })); return true; }
+  catch { return false; }   // quota — in-memory queue still retries
+}
+
+function read(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const box = raw ? JSON.parse(raw) : null;
+    if (!box || box.value == null) return null;
+    if (String(box.owner ?? "") !== String(owner ?? "")) return null;  // another account's data
+    return box;
+  } catch { return null; }
+}
+
+export function setSyncOwner(id) {
+  owner  = id ?? null;
+  outbox = read(OUTBOX_KEY)?.value ?? [];
+  failed = read(FAILED_KEY)?.value ?? [];
+  emit();
+}
+
+// ── Cache ─────────────────────────────────────────────────────────────────────
+
+// programme_templates is server-owned read-only data merged into the schema at
+// load; it lives in the static cache, not in every schema snapshot.
+function stripTemplates(schema) {
+  if (!schema || !('programme_templates' in schema)) return schema;
+  const { programme_templates, ...rest } = schema;
+  return rest;
+}
+
+export function cacheSchema(schema) { write(CACHE_KEY, stripTemplates(schema)); }
+export function readCachedSchema()  { return read(CACHE_KEY); }        // { savedAt, value } | null
+
+export function cacheStatic(exLib, templates) { write(STATIC_KEY, { exLib, templates }); }
+export function readCachedStatic() { return read(STATIC_KEY)?.value ?? null; }
+
+// ── Outbox ────────────────────────────────────────────────────────────────────
+
+function persistOutbox() { write(OUTBOX_KEY, outbox); }
+function persistFailed()  { write(FAILED_KEY, failed); }
+
 function state() {
   return {
-    // 'idle' — server has everything; 'saving' — push in progress;
-    // 'retrying' — push failed, queued for another attempt; 'offline' — waiting
-    // for the connection to come back.
-    status: !pending ? 'idle'
+    status: failed.length ? 'failed'
+          : !outbox.length ? 'idle'
           : inFlight ? 'saving'
           : isOffline() ? 'offline'
           : attempt > 0 ? 'retrying' : 'saving',
-    attempt, lastError, lastSyncedAt, hasPending: !!pending,
+    pending: outbox.length,
+    failed:  failed.length,
+    firstFailure: failed[0] ?? null,
+    attempt, lastError, lastSyncedAt,
   };
 }
 
 function emit() { const s = state(); for (const fn of listeners) fn(s); }
-
-function isOffline() {
-  return typeof navigator !== 'undefined' && navigator.onLine === false;
-}
-
-// The mirror is stamped with the account it belongs to: on a shared device, one
-// user's unsynced work must never be recovered into another's session.
-let owner = null;
-
-export function setSyncOwner(id) { owner = id ?? null; }
-
-function persist(schema) {
-  try {
-    localStorage.setItem(PENDING_KEY, JSON.stringify({ savedAt: Date.now(), owner, schema }));
-  } catch {
-    // Quota exceeded — the in-memory queue still retries, we just lose the
-    // across-reload safety net for this change.
-  }
-}
-
-// { savedAt, owner, schema } written by the last unconfirmed change, or null.
-// Returns null for another account's snapshot (left in place for when they
-// log back in).
-export function readPendingSchema() {
-  try {
-    const raw = localStorage.getItem(PENDING_KEY);
-    const val = raw ? JSON.parse(raw) : null;
-    if (!val?.schema) return null;
-    if (String(val.owner ?? "") !== String(owner ?? "")) return null;
-    return val;
-  } catch { return null; }
-}
-
-// Cheap semantic fingerprint used to decide whether a recovered snapshot is
-// actually newer than the server's copy — a push whose *response* was lost still
-// landed, and re-announcing it every load would be noise. Key order differs
-// between our snapshot and the server's rebuilt JSON, so raw string comparison
-// is useless; this covers the collections that carry work, including per-session
-// contents so an edit to an existing session is still detected as a difference.
-export function schemaSignature(s) {
-  const sessions = (s?.workout_sessions || []).map(w => {
-    let sets = 0, reps = 0;
-    for (const ex of (w.exercises_performed || []))
-      for (const r of (ex.set_results || [])) { sets++; reps += Number(r.reps_completed) || 0; }
-    return `${w.id}:${sets}:${reps}:${(w.notes || "").length}:${w.duration_minutes ?? ""}`;
-  }).sort().join(',');
-  const instances = (s?.programme_instances || []).map(i =>
-    `${i.id}:${i.status}:${i.current_cycle}.${i.current_week}.${i.current_day}:${i.current_cycle_role}:${i.current_macrocycle_block}:${i.needs_tm_review ? 1 : 0}:${(i.training_maxes || []).map(t => `${t.exercise_id}=${t.tm_kg}`).join('/')}:${(i.working_weights || []).map(t => `${t.exercise_id}=${t.weight_kg}`).join('/')}`
-  ).sort().join(',');
-  return [
-    sessions, instances,
-    (s?.e1rm_log || []).length,
-    (s?.lift_maxes || []).map(m => `${m.exercise_id}=${m.one_rm_kg}`).sort().join('/'),
-    (s?.custom_exercises || []).length,
-    JSON.stringify(s?.user_profile ?? null),
-  ].join('|');
-}
-
-export function clearPendingSchema() {
-  pending = null;
-  attempt = 0;
-  lastError = null;
-  try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ }
-  emit();
-}
 
 export function subscribeSync(fn) {
   listeners.add(fn);
@@ -106,66 +105,161 @@ export function subscribeSync(fn) {
   return () => listeners.delete(fn);
 }
 
-// programme_templates is read-only server data that the client merges into the
-// schema at load; PUT /data/schema ignores it, so keep it out of the payload and
-// out of the localStorage mirror (it's re-attached on recovery).
-function stripTemplates(schema) {
-  if (!schema || !('programme_templates' in schema)) return schema;
-  const { programme_templates, ...rest } = schema;
-  return rest;
+function isOffline() { return typeof navigator !== 'undefined' && navigator.onLine === false; }
+
+// One entity per op. `key` is the coalescing identity: a newer op for the same
+// entity replaces the pending one in place, which keeps the queue small and
+// stops stale intermediate states being replayed.
+export function enqueue(op) {
+  if (!op?.kind || !op?.key) return;
+
+  // Deploy-skew fallback: no incremental routes server-side, so send everything
+  // as a whole-schema replace instead (the cache is the full document). exlib has
+  // its own long-standing endpoint and is never part of the schema, so it's exempt.
+  if (incrementalUnsupported && op.kind !== 'schema.put' && op.kind !== 'exlib.put') {
+    const cached = readCachedSchema()?.value;
+    if (cached) return enqueue({ kind: 'schema.put', key: 'schema', payload: cached });
+    return;
+  }
+
+  // A whole-schema replace (restore / raw JSON edit) supersedes everything.
+  if (op.kind === 'schema.put') outbox = [];
+
+  const entry = { ...op, queuedAt: Date.now(), tries: 0 };
+  const at = outbox.findIndex(o => o.key === op.key);
+  if (at >= 0) outbox[at] = { ...entry, queuedAt: outbox[at].queuedAt };
+  else outbox.push(entry);
+
+  persistOutbox();
+  emit();
+  flushOutbox();
 }
 
-// Queue a schema snapshot for the server. Safe to call on every change — later
-// calls simply replace the pending snapshot rather than piling up requests.
-export function queueSchema(schema) {
-  pending = stripTemplates(schema);
-  persist(pending);
-  emit();
-  flushSchema();
-  return pending;
-}
-
-export async function flushSchema() {
-  if (inFlight || !pending) return;
-  // Logged out: keep the snapshot mirrored (stamped with its owner) and wait for
-  // that account to sign back in rather than looping on 401s.
-  if (owner === null) { emit(); return; }
-  if (isOffline()) { emit(); schedule(15000); return; }
-
-  const snapshot = pending;
-  inFlight = true;
-  emit();
-  try {
-    await api.data.putSchema(snapshot);
-    lastSyncedAt = Date.now();
-    inFlight = false;
-    // Only clear if nothing newer arrived while this was in flight.
-    if (pending === snapshot) clearPendingSchema();
-    else { attempt = 0; lastError = null; emit(); flushSchema(); }
-  } catch (err) {
-    inFlight = false;
-    attempt += 1;
-    lastError = err?.message || String(err);
-    emit();
-    schedule();
+function send(op) {
+  switch (op.kind) {
+    case 'session.put':     return api.data.putSession(op.id, op.payload);
+    case 'session.delete':  return api.data.deleteSession(op.id);
+    case 'instance.put':    return api.data.putInstance(op.id, op.payload);
+    case 'instance.delete': return api.data.deleteInstance(op.id);
+    case 'profile.patch':   return api.data.patchProfile(op.payload);
+    case 'liftmax.put':     return api.data.putLiftMax(op.id, op.payload);
+    case 'liftmax.delete':  return api.data.deleteLiftMax(op.id);
+    case 'customex.put':    return api.data.putCustomEx(op.payload);
+    case 'exlib.put':       return api.data.putExlib(op.payload);
+    case 'schema.put':      return api.data.putSchema(op.payload);
+    default: return Promise.reject(Object.assign(new Error(`Unknown op ${op.kind}`), { status: 400 }));
   }
 }
 
+// 4xx that aren't worth repeating: the request itself is wrong (or the record
+// belongs to someone else). Everything else — network, 5xx, 429, auth blips —
+// is transient and gets retried.
+function isPermanent(status) {
+  return status === 400 || status === 403 || status === 409 || status === 413 || status === 422;
+}
+
+export async function flushOutbox() {
+  if (inFlight || !outbox.length) return;
+  if (owner === null) { emit(); return; }        // logged out — keep the queue for next sign-in
+  if (isOffline()) { emit(); schedule(15000); return; }
+
+  inFlight = true;
+  emit();
+
+  while (outbox.length) {
+    const op = outbox[0];
+    try {
+      await send(op);
+      lastSyncedAt = Date.now();
+      // Drop it only if it's still the same op — a newer edit may have replaced
+      // it mid-flight, and that one still needs sending.
+      if (outbox[0] === op) outbox.shift();
+      persistOutbox();
+      attempt = 0; lastError = null;
+      emit();
+    } catch (err) {
+      const status = err?.status;
+
+      // Server predates the incremental routes: retry everything as one
+      // whole-schema PUT rather than dead-lettering real workout data.
+      if (status === 404 && op.kind !== 'schema.put' && op.kind !== 'exlib.put') {
+        incrementalUnsupported = true;
+        const cached = readCachedSchema()?.value;
+        outbox = cached ? [{ kind: 'schema.put', key: 'schema', payload: cached, queuedAt: Date.now(), tries: 0 }] : [];
+        persistOutbox();
+        continue;
+      }
+
+      if (isPermanent(status)) {
+        failed.push({ ...op, error: err.message || String(err), status, failedAt: Date.now() });
+        outbox.shift();
+        persistOutbox(); persistFailed();
+        lastError = err.message || String(err);
+        emit();
+        continue;                                 // don't let one bad op block the rest
+      }
+
+      op.tries = (op.tries || 0) + 1;
+      attempt += 1;
+      lastError = err?.message || String(err);
+      inFlight = false;
+      persistOutbox();
+      emit();
+      schedule();
+      return;
+    }
+  }
+
+  inFlight = false;
+  emit();
+}
+
 function schedule(delayOverride) {
-  if (timer || !pending) return;
+  if (timer || !outbox.length) return;
   const delay = delayOverride ?? Math.min(1000 * 2 ** Math.min(attempt, 6), MAX_BACKOFF);
-  timer = setTimeout(() => { timer = null; flushSchema(); }, delay);
+  timer = setTimeout(() => { timer = null; flushOutbox(); }, delay);
+}
+
+// ── Dead letters ──────────────────────────────────────────────────────────────
+
+export function failedOps() { return failed; }
+
+export function retryFailed() {
+  if (!failed.length) return;
+  outbox = [...outbox, ...failed.map(({ error, status, failedAt, ...op }) => ({ ...op, tries: 0 }))];
+  failed = [];
+  persistOutbox(); persistFailed();
+  attempt = 0;
+  emit();
+  flushOutbox();
+}
+
+export function discardFailed() {
+  failed = [];
+  persistFailed();
+  emit();
+}
+
+export function outboxCount() { return outbox.length; }
+
+// Drop unsent work deliberately (e.g. "use the server's copy instead").
+export function discardOutbox() {
+  outbox = [];
+  failed = [];
+  persistOutbox(); persistFailed();
+  attempt = 0; lastError = null;
+  emit();
 }
 
 if (typeof window !== 'undefined') {
-  // Reconnect / refocus are the moments a stuck push is most likely to succeed,
-  // so reset the backoff and try immediately rather than waiting it out.
-  window.addEventListener('online', () => { attempt = 0; flushSchema(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { attempt = 0; flushSchema(); } });
+  // Reconnect and refocus are when a stuck push is most likely to work, so reset
+  // the backoff and try at once instead of waiting it out.
+  window.addEventListener('online', () => { attempt = 0; flushOutbox(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { attempt = 0; flushOutbox(); } });
   window.addEventListener('beforeunload', (e) => {
-    if (!pending) return;
-    // Unsaved work is mirrored to localStorage and recovered on next load, but
-    // warn anyway — closing now means it isn't on the server yet.
+    if (!outbox.length) return;
+    // It's all mirrored and will be sent next launch, but closing now means it
+    // isn't on the server yet — worth a prompt.
     e.preventDefault();
     e.returnValue = '';
   });
