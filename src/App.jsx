@@ -6,13 +6,14 @@ import {
   failedOps, retryFailed, discardFailed,
 } from "./sync.js";
 import { diffSchemaOps } from "./schemaOps.js";
+import { repRangeOf, targetRepsOf, timingOf, planInterleave, progressionSuggestion } from "./assistance.js";
 import AuthPage from "./AuthPage.jsx";
 
 // ─── APP VERSION ────────────────────────────────────────────────────────────
 // ⚠️ BUMP THIS on every user-facing change (shown on the Settings page so it's
 // obvious which build is deployed). ANY coder or agent editing this app MUST
 // update it — use semver: patch = fix, minor = feature, major = breaking.
-export const APP_VERSION = "1.5.0";
+export const APP_VERSION = "1.6.0";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 
@@ -544,7 +545,10 @@ function Stepper({ label, value, onDec, onInc, display }) {
 // ─── LOG SET MODAL ────────────────────────────────────────────────────────────
 
 function LogSetModal({ set, setLabel, onConfirm, onClose, units, defaultRpe, defaultReps: defaultRepsOverride, isEdit }) {
-  const defaultReps = defaultRepsOverride ?? (typeof set.reps === "number" ? set.reps : 1);
+  // With a rep_range, start at the bottom of the band — anything in it counts,
+  // and starting at the top invites a nudge down rather than an honest count.
+  const defaultReps = defaultRepsOverride
+    ?? (Array.isArray(set.repRange) ? set.repRange[0] : (typeof set.reps === "number" ? set.reps : 1));
   const [reps,   setReps]   = useState(defaultReps);
   const [rpe,    setRpe]    = useState(defaultRpe ?? 8.0);
   const [weight, setWeight] = useState(dspW(set.weight || 0, units));
@@ -1752,10 +1756,22 @@ function buildSessionPlan(inst, tmpl, rootSchema) {
         exercises.push({ exercise_id: mainLift.exercise_id, role: "supplemental", label: "FSL Back-off",
           sets: Array.from({ length: fslConfig.sets }, (_, i) => ({ setIndex: i, weight: fslW, reps: fslConfig.reps, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
       }
-      (ph.assistance_by_day?.[String(day)] || []).forEach(a =>
+      // Assistance entries may carry rep_range / timing / progression. All are
+      // optional: without them this is the old fixed-reps, after-the-main-work
+      // behaviour. The plan is JSON (it's mirrored as a draft), so only plain
+      // values are attached.
+      const hasSupplemental = !!fslConfig;
+      (ph.assistance_by_day?.[String(day)] || []).forEach(a => {
+        const range = repRangeOf(a);
+        const reps  = targetRepsOf(a);
         exercises.push({ exercise_id: a.exercise_id, role: "assistance",
-          sets: Array.from({ length: a.sets }, (_, i) => ({ setIndex: i, weight: 0, reps: a.reps ?? a.reps_is_seconds ?? 0, isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) })
-      );
+          timing: timingOf(a, { hasSupplemental }),
+          ...(range ? { repRange: range } : {}),
+          ...(a.progression ? { progression: a.progression } : {}),
+          ...(a.notes ? { notes: a.notes } : {}),
+          sets: Array.from({ length: a.sets }, (_, i) => ({ setIndex: i, weight: 0, reps, ...(range ? { repRange: range } : {}), isWarmup: false, isDone: false, repsLogged: null, rpeLogged: null })) });
+      });
+      planInterleave(exercises);
     }
     return { exercises, week, day, weekLabel: waveWeek.week_label, role, mainLiftId: mainLift.exercise_id, tm, instanceId: inst.id };
   }
@@ -2861,6 +2877,10 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     setSetResults(r => ({ ...r, [`${exIdx}-${setIdx}`]: { reps, rpe, done: true } }));
     setLogModal(null);
     if (wasAlreadyDone) return;
+    // A set performed inside another exercise's rest window doesn't start a rest
+    // of its own — the supplemental clock is already running, which is the whole
+    // reason the movement was put there.
+    if ((ex.interleavedSets || []).includes(setIdx)) return;
     const nextSetIdx = setIdx + 1;
     if (nextSetIdx < ex.sets.length) {
       if (!ex.sets[nextSetIdx].isWarmup) {
@@ -2938,7 +2958,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
   }
 
   // ── Render: SetRow ──────────────────────────────────────────────────────────
-  function SetRow({ exIdx, setIdx, set }) {
+  function SetRow({ exIdx, setIdx, set, nested = false }) {
     const result       = setResults[`${exIdx}-${setIdx}`];
     const done         = result?.done;
     const exEntry      = sessionPlan.exercises[exIdx];
@@ -2949,7 +2969,9 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     const weight       = getEffectiveWeight(exIdx, setIdx, set);
     const hint         = done ? getRpeHint(result.rpe, exEntry.role) : null;
     const activeExIdx = isModern ? viewExIdx : currentExIdx;
-    const isNext = !done && exIdx === activeExIdx &&
+    // A nested row is shown inside the exercise being worked on, so it counts as
+    // active — otherwise the interleaved set never gets the "you're up" styling.
+    const isNext = !done && (nested || exIdx === activeExIdx) &&
       exSets.slice(0, setIdx).filter(s => !s.isWarmup).every((_, j) => {
         const wc = numWarmup;
         return setResults[`${exIdx}-${wc + j}`]?.done;
@@ -2957,11 +2979,25 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
 
     const rowBg     = done ? "var(--set-done-bg)"   : set.isWarmup ? "var(--set-warmup-bg)"   : isNext ? "var(--set-next-bg)"   : "var(--set-idle-bg)";
     const rowBorder = done ? "var(--set-done-bdr)"  : set.isWarmup ? "var(--set-warmup-bdr)"  : isNext ? "var(--set-next-bdr)"  : "var(--set-idle-bdr)";
-    const plannedReps = set.reps === "amrap" ? "AMRAP" : `${set.reps} reps`;
+    // A rep_range shows the band it's worth working in, not one number to chase.
+    const plannedReps = set.reps === "amrap" ? "AMRAP"
+      : set.repRange ? `${set.repRange[0]}–${set.repRange[1]} reps`
+      : `${set.reps} reps`;
+    // Rendered inside another exercise's rest window (timing: between_supplemental_sets).
+    const nestedLabel = nested ? getExercise(exEntry.exercise_id, rootSchema, exLib).name : null;
 
     return (
       <>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px", marginBottom: "4px", background: rowBg, border: `1px solid ${rowBorder}`, borderRadius: "6px" }}>
+        {nested && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "2px 0 3px 20px", fontSize: "13px", color: "var(--accent)" }}>
+            <span>↳</span>
+            <span>{nestedLabel}</span>
+            <span style={{ color: "var(--text-dim)" }}>
+              {setIdx + 1}/{exSets.filter(s => !s.isWarmup).length}
+            </span>
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px", marginBottom: "4px", marginLeft: nested ? "20px" : 0, background: rowBg, border: `1px solid ${rowBorder}`, borderRadius: "6px" }}>
           {/* Set number */}
           <div style={{ width: "22px", textAlign: "center", color: "var(--text-dim)", fontSize: "14px", flexShrink: 0, fontWeight: "600" }}>{setNum}</div>
 
@@ -3012,6 +3048,90 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
     );
   }
 
+  // One exercise's sets, with any assistance sets allocated to its rest windows
+  // rendered inline after the set they follow — the whole point of
+  // timing: "between_supplemental_sets". Interleaved rows use the assistance
+  // exercise's own result keys, so logging, editing, drafts and history are
+  // untouched by where the row happens to appear.
+  function renderSets(ex, exIdx) {
+    const movedOut = new Set(ex.interleavedSets || []);
+    let workIdx = -1;
+    return ex.sets.map((set, setIdx) => {
+      if (!set.isWarmup) workIdx += 1;
+      if (movedOut.has(setIdx)) return null;      // shown inside the supplemental block
+      const paired = set.isWarmup ? [] : (ex.interleavedAfter?.[workIdx] || []);
+      return (
+        <div key={setIdx}>
+          {SetRow({ exIdx, setIdx, set })}
+          {paired.map(p => (
+            <div key={`${p.exIdx}-${p.setIdx}`}>
+              {SetRow({ exIdx: p.exIdx, setIdx: p.setIdx, set: sessionPlan.exercises[p.exIdx].sets[p.setIdx], nested: true })}
+            </div>
+          ))}
+        </div>
+      );
+    });
+  }
+
+  // Body of an exercise card: coaching note, load suggestion, sets, and a
+  // pointer when this movement's sets live in another exercise's rest windows.
+  function ExerciseBody({ ex, exIdx }) {
+    const interleavedCount = (ex.interleavedSets || []).length;
+    const hostName = ex.interleavedInto != null
+      ? (sessionPlan.exercises[ex.interleavedInto]?.label || getExercise(sessionPlan.exercises[ex.interleavedInto].exercise_id, rootSchema, exLib).name)
+      : null;
+    const done = (ex.interleavedSets || []).filter(si => setResults[`${exIdx}-${si}`]?.done).length;
+
+    return (
+      <>
+        {ex.notes && (
+          <div style={{ color: "var(--text-muted)", fontSize: "13px", lineHeight: 1.45, marginBottom: "8px" }}>{ex.notes}</div>
+        )}
+        {ProgressionChip({ ex, exIdx })}
+        {interleavedCount > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", marginBottom: "6px", borderRadius: "6px", background: "var(--accent-dim)", color: "var(--accent)", fontSize: "13px" }}>
+            <span>↳</span>
+            <span style={{ flex: 1 }}>
+              {done}/{interleavedCount} sets done between the {hostName || "supplemental"} sets
+            </span>
+            {ex.interleavedInto != null && (
+              <button style={S.btnSm("active")} onClick={() => { setViewExIdx(ex.interleavedInto); setCurrentExIdx(ex.interleavedInto); setExpandedSet(s => new Set([...s, ex.interleavedInto])); }}>
+                Go there
+              </button>
+            )}
+          </div>
+        )}
+        {renderSets(ex, exIdx)}
+      </>
+    );
+  }
+
+  // Accessory load only ever changes when someone types a new number, so a
+  // template that says how to progress gets to prompt — as a suggestion, never
+  // an automatic change.
+  function ProgressionChip({ ex, exIdx }) {
+    if (ex.role !== "assistance" || !ex.progression) return null;
+    const current = getEffectiveWeight(exIdx, ex.sets.findIndex(s => !s.isWarmup), ex.sets[0]) || 0;
+    const s = progressionSuggestion({
+      entry: { rep_range: ex.repRange, progression: ex.progression },
+      exerciseId: ex.exercise_id,
+      sessions: rootSchema.workout_sessions || [],
+      currentWeightKg: current,
+    });
+    if (!s) return null;
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", padding: "8px 10px", marginBottom: "8px", borderRadius: "6px", background: "var(--success-dim)", color: "var(--success)", fontSize: "13px" }}>
+        <span style={{ flex: 1, minWidth: "150px" }}>
+          {s.sessions} sessions at {ex.repRange[1]} reps — ready for {fmtW(s.toKg, units)}?
+        </span>
+        <button style={S.btnSm("success")}
+          onClick={() => applyWeightOverride(exIdx, ex.sets.findIndex(st => !st.isWarmup), s.toKg, true)}>
+          Use {fmtW(s.toKg, units)}
+        </button>
+      </div>
+    );
+  }
+
   // ── Render: Session Overview Overlay (Modern) ───────────────────────────────
   function SessionOverviewOverlay() {
     return (
@@ -3053,7 +3173,10 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                     const res = setResults[`${i}-${wc + si}`];
                     const w   = weightOverrides[`${i}-${wc + si}`] ?? weightOverrides[`${i}-all`] ?? set.weight;
                     const wTxt = w > 0 ? fmtW(w, units) : "—";
-                    const rTxt = res?.done ? `${res.reps}` : set.reps === "amrap" ? "AMRAP" : `${set.reps}`;
+                    const rTxt = res?.done ? `${res.reps}`
+                      : set.reps === "amrap" ? "AMRAP"
+                      : set.repRange ? `${set.repRange[0]}–${set.repRange[1]}`
+                      : `${set.reps}`;
                     return (
                       <span key={si} style={{ fontSize: "12px", padding: "3px 8px", borderRadius: "4px", background: res?.done ? "var(--set-done-bg)" : "var(--set-idle-bg)", border: `1px solid ${res?.done ? "var(--set-done-bdr)" : "var(--set-idle-bdr)"}`, color: res?.done ? "var(--success)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
                         {wTxt}×{rTxt}
@@ -3162,7 +3285,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             <div style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: "4px" }}>{doneCnt}/{workSets.length} sets done</div>
           </div>
           <div style={{ padding: "12px" }}>
-            {ex.sets.map((set, setIdx) => SetRow({ exIdx: viewExIdx, setIdx, set }))}
+            {ExerciseBody({ ex, exIdx: viewExIdx })}
           </div>
           <ExHistoryStrip
             exerciseId={ex.exercise_id} role={ex.role}
@@ -3255,7 +3378,7 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
             onNavigateToStats={onNavigateToStats}
           />
           <div style={{ padding: "10px" }}>
-            {ex.sets.map((set, setIdx) => SetRow({ exIdx, setIdx, set }))}
+            {ExerciseBody({ ex, exIdx })}
           </div>
         </div>
       </div>
@@ -3440,7 +3563,9 @@ function SessionRunner({ rootSchema, exLib, onSessionComplete, onSchemaChange, o
                           {workSets.map((s, si) => (
                             <div key={si} style={{ background: "var(--set-idle-bg)", border: "1px solid var(--set-idle-bdr)", padding: "4px 9px", fontSize: "14px", borderRadius: "5px" }}>
                               <span style={{ color: "var(--accent)" }}>{fmtW(s.weight, units)}</span>
-                              <span style={{ color: "var(--text-muted)", marginLeft: "5px" }}>×{s.reps === "amrap" ? "AMRAP" : s.reps}</span>
+                              <span style={{ color: "var(--text-muted)", marginLeft: "5px" }}>
+                                ×{s.reps === "amrap" ? "AMRAP" : s.repRange ? `${s.repRange[0]}–${s.repRange[1]}` : s.reps}
+                              </span>
                             </div>
                           ))}
                         </div>

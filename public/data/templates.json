@@ -446,5 +446,348 @@
         "selection": "prescribed",
         "notes": "Assistance is prescribed per day with bodybuilding and APT-correction focus. Select weight by RPE."
       }
+    },
+    {
+      "id": "531_5spro_fsl_lean",
+      "name": "5/3/1 - Leader - 5s PRO + FSL (Lean Assistance)",
+      "author": "Jim Wendler",
+      "experience_level": ["intermediate", "advanced"],
+      "days_per_week": 4,
+      "description": "4-week leader block: 5s PRO (strict fives, no AMRAP) with 5x5 FSL supplemental, Week 4 deload. Assistance cut to three movements per day, with the arm or core movement performed between FSL sets so it is complete before the session tail, where assistance is most often abandoned. Targets ~55 minutes per session. Run twice before an anchor.",
+      "progression_model": {
+        "type": "training_max",
+        "initial_tm_percentage": 0.90,
+        "increment_trigger": "per_cycle",
+        "lift_increments": [
+          { "group": "upper_body", "exercises": ["ex_bench","ex_ohp"], "increment_kg": 2.5 },
+          { "group": "lower_body", "exercises": ["ex_squat","ex_deadlift"], "increment_kg": 5.0 }
+        ],
+        "failure_handling": { "manual_reset_allowed": true },
+        "deload_strategy": { "trigger": "scheduled", "position": "week_4" }
+      },
+      "phases": [{
+        "phase_id": "5spro_fsl_lean_main",
+        "phase_number": 1,
+        "name": "Main Phase",
+        "typical_duration_weeks": 4,
+        "transition_rule": null,
+        "main_lifts": [
+          { "day": 1, "exercise_id": "ex_ohp" },
+          { "day": 2, "exercise_id": "ex_deadlift" },
+          { "day": 3, "exercise_id": "ex_bench" },
+          { "day": 4, "exercise_id": "ex_squat" }
+        ],
+        "wave_weeks": [
+          {
+            "week": 1,
+            "week_label": "Week 1 — 5s PRO",
+            "is_deload": false,
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 5 }],
+            "core_sets": [{ "tm_pct": 0.65, "reps": 5 },{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": 5 }],
+            "fsl": { "sets": 5, "reps": 5, "tm_pct": 0.65 }
+          },
+          {
+            "week": 2,
+            "week_label": "Week 2 — 5s PRO",
+            "is_deload": false,
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 5 }],
+            "core_sets": [{ "tm_pct": 0.70, "reps": 5 },{ "tm_pct": 0.80, "reps": 5 },{ "tm_pct": 0.90, "reps": 5 }],
+            "fsl": { "sets": 5, "reps": 5, "tm_pct": 0.70 }
+          },
+          {
+            "week": 3,
+            "week_label": "Week 3 — 5s PRO",
+            "is_deload": false,
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 5 }],
+            "core_sets": [{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": 5 },{ "tm_pct": 0.95, "reps": 5 }],
+            "fsl": { "sets": 5, "reps": 5, "tm_pct": 0.75 }
+          },
+          {
+            "week": 4,
+            "week_label": "Week 4 — Deload",
+            "is_deload": true,
+            "deload_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 5 }]
+          }
+        ],
+        "assistance_by_day": {
+          "1": [
+            { "exercise_id": "ex_ez_bar_curl", "sets": 4, "reps": 12, "rep_range": [10, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 1.25 },
+              "notes": "Performed between FSL sets. Elbows pinned, full extension at the bottom." },
+            { "exercise_id": "ex_chest_supported_row", "sets": 4, "reps": 12, "rep_range": [10, 12],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Chest stays on the pad, elbows travel to the hips." },
+            { "exercise_id": "ex_incline_db_press", "sets": 3, "reps": 12, "rep_range": [8, 12],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.0 },
+              "notes": "Second horizontal pressing exposure of the week." }
+          ],
+          "2": [
+            { "exercise_id": "ex_hanging_leg_raise", "sets": 4, "reps": 12, "rep_range": [8, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Performed between FSL sets. Curl the pelvis under at the top — that is the rep, not knee height." },
+            { "exercise_id": "ex_romanian_deadlift", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 5.0 },
+              "notes": "Hamstrings under stretch. Stop where the back would round." },
+            { "exercise_id": "ex_chinup", "sets": 4, "reps": 10, "rep_range": [6, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Supinated grip loads the biceps heavily. Add weight rather than reps beyond the range." }
+          ],
+          "3": [
+            { "exercise_id": "ex_tricep_pushdown", "sets": 4, "reps": 15, "rep_range": [12, 15], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Performed between FSL sets. Constant tension, full lockout." },
+            { "exercise_id": "ex_close_grip_bench", "sets": 3, "reps": 10, "rep_range": [6, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Elbows tucked, forearms vertical. Builds lockout strength for the bench." },
+            { "exercise_id": "ex_tbar_row", "sets": 4, "reps": 12, "rep_range": [8, 12],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Heavier than the day 1 row, same strictness." }
+          ],
+          "4": [
+            { "exercise_id": "ex_ab_wheel", "sets": 4, "reps": 12, "rep_range": [8, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 0 },
+              "notes": "Performed between FSL sets. Ribs down, glutes squeezed. Resist extension rather than chasing distance." },
+            { "exercise_id": "ex_barbell_hip_thrust", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 5.0 },
+              "notes": "Pause 1 second at the top. Listed first after the main work so it is not the movement that gets cut." },
+            { "exercise_id": "ex_leg_curl", "sets": 3, "reps": 12, "rep_range": [10, 12],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Hips pressed into the pad to isolate the hamstrings." },
+            { "exercise_id": "ex_kneeling_couch_stretch", "sets": 2, "reps_is_seconds": 60,
+              "notes": "Per leg. Squeeze the glute of the stretching leg to drive the hip forward." }
+          ]
+        }
+      }],
+      "warmup_protocol": { "type": "defined_in_phase", "start_weight_kg": 20.0 },
+      "cycle_structure": {
+        "microcycle_days": 7,
+        "mesocycle_weeks": 4,
+        "deload_week": true,
+        "macrocycle_description": "4-week leader block: W1–W3 5s PRO + 5×5 FSL, W4 deload. No PR sets — leaders bank volume so the anchor can spend it. TM increases each cycle. If the most recent anchor produced fewer than 3 reps at 95% TM, repeat the cycle at the same numbers instead."
+      },
+      "assistance": {
+        "selection": "prescribed",
+        "notes": "Three movements per day. The first is performed between FSL sets rather than after them — it costs no extra session time and protects the movement most often dropped at the end of a session. Every movement carries a rep range and a load trigger: hit the top of the range on all sets in two consecutive sessions, then add the increment."
+      }
+    },
+    {
+      "id": "531_anchor_531_lean",
+      "name": "5/3/1 - Anchor - 5/3/1 + FSL (Lean Assistance)",
+      "author": "Jim Wendler",
+      "experience_level": ["intermediate", "advanced"],
+      "days_per_week": 4,
+      "description": "3-week anchor in the standard 5/3/1 order with a PR set every week. Supplemental cut to 3x5 FSL, assistance cut to three movements per day with the arm or core movement performed between FSL sets. Week 3 doubles as a training-max calibration check: 5 or more reps at 95% means the TM is honest, 3-4 means hold it, fewer than 3 means reduce it.",
+      "progression_model": {
+        "type": "training_max",
+        "initial_tm_percentage": 0.90,
+        "increment_trigger": "per_cycle",
+        "lift_increments": [
+          { "group": "upper_body", "exercises": ["ex_bench","ex_ohp"], "increment_kg": 2.5 },
+          { "group": "lower_body", "exercises": ["ex_squat","ex_deadlift"], "increment_kg": 5.0 }
+        ],
+        "failure_handling": { "manual_reset_allowed": true }
+      },
+      "phases": [{
+        "phase_id": "anchor_531_lean_main",
+        "phase_number": 1,
+        "name": "Anchor Phase",
+        "typical_duration_weeks": 3,
+        "main_lifts": [
+          { "day": 1, "exercise_id": "ex_ohp" },
+          { "day": 2, "exercise_id": "ex_deadlift" },
+          { "day": 3, "exercise_id": "ex_bench" },
+          { "day": 4, "exercise_id": "ex_squat" }
+        ],
+        "wave_weeks": [
+          {
+            "week": 1,
+            "week_label": "Week 1 (5s Week + PR)",
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 3 }],
+            "core_sets": [{ "tm_pct": 0.65, "reps": 5 },{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": "amrap", "amrap_minimum": 5 }],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.65 }
+          },
+          {
+            "week": 2,
+            "week_label": "Week 2 (3s Week + PR)",
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 3 }],
+            "core_sets": [{ "tm_pct": 0.70, "reps": 3 },{ "tm_pct": 0.80, "reps": 3 },{ "tm_pct": 0.90, "reps": "amrap", "amrap_minimum": 3 }],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.70 }
+          },
+          {
+            "week": 3,
+            "week_label": "Week 3 (1s Week + PR)",
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 3 }],
+            "core_sets": [{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": 3 },{ "tm_pct": 0.95, "reps": "amrap", "amrap_minimum": 1 }],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.75 }
+          }
+        ],
+        "assistance_by_day": {
+          "1": [
+            { "exercise_id": "ex_ez_bar_curl", "sets": 3, "reps": 12, "rep_range": [10, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 1.25 },
+              "notes": "Performed between FSL sets. Elbows pinned, full extension at the bottom." },
+            { "exercise_id": "ex_chest_supported_row", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Chest stays on the pad, elbows travel to the hips." },
+            { "exercise_id": "ex_incline_db_press", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.0 },
+              "notes": "Second horizontal pressing exposure of the week." }
+          ],
+          "2": [
+            { "exercise_id": "ex_hanging_leg_raise", "sets": 3, "reps": 12, "rep_range": [8, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Performed between FSL sets. Curl the pelvis under at the top." },
+            { "exercise_id": "ex_romanian_deadlift", "sets": 3, "reps": 8, "rep_range": [6, 8],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 5.0 },
+              "notes": "Stop where the back would round. Lighter than in the leaders — the PR sets take the recovery." },
+            { "exercise_id": "ex_chinup", "sets": 3, "reps": 10, "rep_range": [6, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Add weight rather than reps beyond the range." }
+          ],
+          "3": [
+            { "exercise_id": "ex_tricep_pushdown", "sets": 3, "reps": 15, "rep_range": [12, 15], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Performed between FSL sets. Constant tension, full lockout." },
+            { "exercise_id": "ex_close_grip_bench", "sets": 3, "reps": 8, "rep_range": [6, 8],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Elbows tucked, forearms vertical." },
+            { "exercise_id": "ex_tbar_row", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Strict — no heaving with the hips." }
+          ],
+          "4": [
+            { "exercise_id": "ex_ab_wheel", "sets": 3, "reps": 12, "rep_range": [8, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 0 },
+              "notes": "Performed between FSL sets. Ribs down, glutes squeezed. Resist extension." },
+            { "exercise_id": "ex_barbell_hip_thrust", "sets": 3, "reps": 8, "rep_range": [6, 8],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 5.0 },
+              "notes": "Pause 1 second at the top. Listed first after the main work so it is not the movement that gets cut." },
+            { "exercise_id": "ex_leg_curl", "sets": 3, "reps": 12, "rep_range": [10, 12],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Hips pressed into the pad to isolate the hamstrings." }
+          ]
+        }
+      }],
+      "warmup_protocol": { "type": "defined_in_phase", "start_weight_kg": 20.0 },
+      "cycle_structure": {
+        "microcycle_days": 7,
+        "mesocycle_weeks": 3,
+        "deload_week": false,
+        "macrocycle_description": "3-week anchor: W1 fives, W2 threes, W3 5/3/1, PR set every week. Run after two leader blocks, then retest or run a 7th-week protocol."
+      },
+      "assistance": {
+        "selection": "prescribed",
+        "notes": "Three movements per day, the first performed between FSL sets. Cut from the leader block because the PR sets take the recovery. If a session must be shortened, drop the last listed movement deliberately rather than letting the tail disappear by attrition."
+      }
+    },
+    {
+      "id": "531_anchor_351_buffered",
+      "name": "5/3/1 - Anchor - 3/5/1 + FSL (Buffered)",
+      "author": "Jim Wendler",
+      "experience_level": ["intermediate", "advanced"],
+      "days_per_week": 4,
+      "description": "3-week anchor running the weeks as 3s, then 5s, then 1s. PR sets on Weeks 1 and 3 only; Week 2 is an 85% buffer with no PR set, deliberately placed between the two PR weeks so the 95% session is reached fresh. Supplemental cut to 3x5 FSL, assistance to three movements per day with the arm or core movement performed between FSL sets. Week 3 doubles as a training-max calibration check: 5 or more reps at 95% means the TM is honest, 3-4 means hold it, fewer than 3 means reduce it.",
+      "progression_model": {
+        "type": "training_max",
+        "initial_tm_percentage": 0.90,
+        "increment_trigger": "per_cycle",
+        "lift_increments": [
+          { "group": "upper_body", "exercises": ["ex_bench","ex_ohp"], "increment_kg": 2.5 },
+          { "group": "lower_body", "exercises": ["ex_squat","ex_deadlift"], "increment_kg": 5.0 }
+        ],
+        "failure_handling": { "manual_reset_allowed": true }
+      },
+      "phases": [{
+        "phase_id": "anchor_351_buffered_main",
+        "phase_number": 1,
+        "name": "Anchor Phase",
+        "typical_duration_weeks": 3,
+        "main_lifts": [
+          { "day": 1, "exercise_id": "ex_ohp" },
+          { "day": 2, "exercise_id": "ex_deadlift" },
+          { "day": 3, "exercise_id": "ex_bench" },
+          { "day": 4, "exercise_id": "ex_squat" }
+        ],
+        "wave_weeks": [
+          {
+            "week": 1,
+            "week_label": "Week 1 (3s Week + PR)",
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 3 }],
+            "core_sets": [{ "tm_pct": 0.70, "reps": 3 },{ "tm_pct": 0.80, "reps": 3 },{ "tm_pct": 0.90, "reps": "amrap", "amrap_minimum": 3 }],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.70 }
+          },
+          {
+            "week": 2,
+            "week_label": "Week 2 (5s Week — Buffer, No PR)",
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 3 }],
+            "core_sets": [{ "tm_pct": 0.65, "reps": 5 },{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": 5 }],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.65 }
+          },
+          {
+            "week": 3,
+            "week_label": "Week 3 (1s Week + PR)",
+            "warmup_sets": [{ "tm_pct": 0.40, "reps": 5 },{ "tm_pct": 0.50, "reps": 5 },{ "tm_pct": 0.60, "reps": 3 }],
+            "core_sets": [{ "tm_pct": 0.75, "reps": 5 },{ "tm_pct": 0.85, "reps": 3 },{ "tm_pct": 0.95, "reps": "amrap", "amrap_minimum": 1 }],
+            "fsl": { "sets": 3, "reps": 5, "tm_pct": 0.75 }
+          }
+        ],
+        "assistance_by_day": {
+          "1": [
+            { "exercise_id": "ex_ez_bar_curl", "sets": 3, "reps": 12, "rep_range": [10, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 1.25 },
+              "notes": "Performed between FSL sets. Elbows pinned, full extension at the bottom." },
+            { "exercise_id": "ex_chest_supported_row", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Chest stays on the pad, elbows travel to the hips." },
+            { "exercise_id": "ex_incline_db_press", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.0 },
+              "notes": "Second horizontal pressing exposure of the week." }
+          ],
+          "2": [
+            { "exercise_id": "ex_hanging_leg_raise", "sets": 3, "reps": 12, "rep_range": [8, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Performed between FSL sets. Curl the pelvis under at the top." },
+            { "exercise_id": "ex_romanian_deadlift", "sets": 3, "reps": 8, "rep_range": [6, 8],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 5.0 },
+              "notes": "Stop where the back would round. Lighter than in the leaders — the PR sets take the recovery." },
+            { "exercise_id": "ex_chinup", "sets": 3, "reps": 10, "rep_range": [6, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Add weight rather than reps beyond the range." }
+          ],
+          "3": [
+            { "exercise_id": "ex_tricep_pushdown", "sets": 3, "reps": 15, "rep_range": [12, 15], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Performed between FSL sets. Constant tension, full lockout." },
+            { "exercise_id": "ex_close_grip_bench", "sets": 3, "reps": 8, "rep_range": [6, 8],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Elbows tucked, forearms vertical." },
+            { "exercise_id": "ex_tbar_row", "sets": 3, "reps": 10, "rep_range": [8, 10],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Strict — no heaving with the hips." }
+          ],
+          "4": [
+            { "exercise_id": "ex_ab_wheel", "sets": 3, "reps": 12, "rep_range": [8, 12], "timing": "between_supplemental_sets",
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 0 },
+              "notes": "Performed between FSL sets. Ribs down, glutes squeezed. Resist extension." },
+            { "exercise_id": "ex_barbell_hip_thrust", "sets": 3, "reps": 8, "rep_range": [6, 8],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 5.0 },
+              "notes": "Pause 1 second at the top. Listed first after the main work so it is not the movement that gets cut." },
+            { "exercise_id": "ex_leg_curl", "sets": 3, "reps": 12, "rep_range": [10, 12],
+              "progression": { "trigger": "top_of_range_all_sets", "consecutive_sessions": 2, "increment_kg": 2.5 },
+              "notes": "Hips pressed into the pad to isolate the hamstrings." }
+          ]
+        }
+      }],
+      "warmup_protocol": { "type": "defined_in_phase", "start_weight_kg": 20.0 },
+      "cycle_structure": {
+        "microcycle_days": 7,
+        "mesocycle_weeks": 3,
+        "deload_week": false,
+        "macrocycle_description": "3-week anchor: W1 threes (PR), W2 fives as a buffer with no PR set, W3 5/3/1 (PR). The buffer sits between the two PR weeks so the 95% session is reached fresh."
+      },
+      "assistance": {
+        "selection": "prescribed",
+        "notes": "Three movements per day, the first performed between FSL sets. Cut from the leader block because the PR sets take the recovery. If a session must be shortened, drop the last listed movement deliberately rather than letting the tail disappear by attrition."
+      }
     }
   ]
